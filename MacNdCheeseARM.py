@@ -6,10 +6,8 @@ import os
 import re
 import shlex
 import shutil
-import stat
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.request
 import webbrowser
@@ -802,6 +800,18 @@ class MainWindow(QMainWindow):
         return env
 
     def installer_script_path(self) -> Path:
+        if getattr(sys, "frozen", False):
+            exe_dir = Path(sys.executable).resolve().parent
+            candidates = [
+                exe_dir / "installer.sh",
+                exe_dir.parent / "Frameworks" / "installer.sh",
+                exe_dir.parent / "Resources" / "installer.sh",
+                Path(getattr(sys, "_MEIPASS", "")) / "installer.sh" if getattr(sys, "_MEIPASS", None) else None,
+            ]
+            for candidate in candidates:
+                if candidate and candidate.exists():
+                    return candidate
+            return exe_dir / "installer.sh"
         return Path(__file__).resolve().with_name("installer.sh")
 
     def run_installer_action(self, action: str) -> None:
@@ -810,8 +820,19 @@ class MainWindow(QMainWindow):
             return
         script = self.installer_script_path()
         if not script.exists():
-            QMessageBox.warning(self, APP_NAME, f"installer.sh not found at {script}")
+            candidates = []
+            if getattr(sys, "frozen", False):
+                exe_dir = Path(sys.executable).resolve().parent
+                candidates = [
+                    exe_dir / "installer.sh",
+                    exe_dir.parent / "Frameworks" / "installer.sh",
+                    exe_dir.parent / "Resources" / "installer.sh",
+                    Path(getattr(sys, "_MEIPASS", "")) / "installer.sh" if getattr(sys, "_MEIPASS", None) else None,
+                ]
+            checked = "\n".join(str(p) for p in candidates if p is not None)
+            QMessageBox.warning(self, APP_NAME, f"installer.sh not found. Checked:\n{checked or script}")
             return
+        self.log(f"Using installer script: {script}")
         args = [
             "bash",
             str(script),
@@ -994,7 +1015,6 @@ class MainWindow(QMainWindow):
         env = self.request_admin_env()
         if env is None:
             return
-        env = self._askpass_env(env)
         if not self.steam_setup.exists():
             QMessageBox.warning(self, APP_NAME, f"SteamSetup.exe not found at {self.steam_setup}")
             return

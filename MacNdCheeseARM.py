@@ -388,7 +388,7 @@ QMainWindow, QDialog {
     background-color: #283141;
 }
 
-/* ── Sidebar ── */
+
 #Sidebar {
     background-color: #1F2633;
     border-right: 1px solid #161D29;
@@ -430,7 +430,7 @@ QMainWindow, QDialog {
 #AddContainerButton::menu-indicator {
     image: none;
 }
-/* ── Topbar ── */
+
 #Topbar {
     background-color: #1F2633;
     border-bottom: 1px solid #161D29;
@@ -450,7 +450,7 @@ QMainWindow, QDialog {
     border: none;
 }
 
-/* Search bar */
+
 QLineEdit#SearchBar {
     background-color: #283141;
     border: 1px solid #3B4B68;
@@ -465,7 +465,7 @@ QLineEdit#SearchBar:focus {
     color: #FFFFFF;
 }
 
-/* Topbar icon buttons */
+
 #TopBarBtn {
     background-color: transparent;
     border: none;
@@ -479,7 +479,7 @@ QLineEdit#SearchBar:focus {
     background-color: rgba(0,216,214,0.08);
 }
 
-/* ── Game Cards ── */
+
 #GameCard {
     background-color: #1A202D;
     border-radius: 6px;
@@ -502,7 +502,7 @@ QLineEdit#SearchBar:focus {
     border-radius: 3px;
 }
 
-/* ── Launch Popup / Dialogs ── */
+
 #LaunchDialog {
     background-color: #2D3848;
     border-radius: 8px;
@@ -546,7 +546,7 @@ QLineEdit#SearchBar:focus {
     color: #00D8D6;
 }
 
-/* ── Combo boxes ── */
+
 QComboBox {
     background-color: #3B4B68;
     border: none;
@@ -567,7 +567,7 @@ QComboBox QAbstractItemView {
     color: #FFFFFF;
 }
 
-/* Line edits inside dialogs */
+
 QLineEdit {
     background-color: #3B4B68;
     border: none;
@@ -580,7 +580,7 @@ QLineEdit:focus {
     border: 1px solid #00D8D6;
 }
 
-/* ── Generic Buttons ── */
+
 QPushButton {
     background-color: #3B4B68;
     border: none;
@@ -597,7 +597,7 @@ QPushButton:pressed {
     color: #1F2633;
 }
 
-/* ── Context Menu ── */
+
 QMenu {
     background-color: #2B384E;
     border: 1px solid #1F2633;
@@ -614,7 +614,7 @@ QMenu::item:selected {
     background-color: #3B4B68;
 }
 
-/* ── Scroll Area ── */
+
 QScrollArea {
     border: none;
     background-color: transparent;
@@ -653,7 +653,7 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
     background: none;
 }
 
-/* ── Status bar ── */
+
 #StatusBar {
     background-color: #1A202D;
     border-top: 1px solid #161D29;
@@ -678,7 +678,7 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
     font-size: 11px;
 }
 
-/* ── Icon selector buttons (Create Bottle) ── */
+
 #IconSelectorBtn {
     background-color: #3B4B68;
     border: 2px solid transparent;
@@ -693,7 +693,7 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
     border: 2px solid #A0AABF;
 }
 
-/* Steam landing page */
+
 #SteamTitle {
     color: #FFFFFF;
     font-size: 48px;
@@ -701,7 +701,7 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
     letter-spacing: 4px;
 }
 
-/* Tab widget */
+
 QTabWidget::pane {
     border: 1px solid #1F2633;
     background-color: #283141;
@@ -1217,11 +1217,11 @@ class GameEntry:
         patterns = [
             "*/*.exe",
             "*/*/*.exe",
-            "*/*/*/*.exe",
-            "*/*/*/*/*.exe",
-            "*/*/*/*/*/*.exe",
-            "*/*/*/*/*/*/*.exe",
-            "*/*/*/*/*/*/*/*.exe",
+            "**.exe",
+            "**/*.exe",
+            "**/*/*.exe",
+            "***.exe",
+            "***/*.exe",
         ]
         for pat in patterns:
             for exe in self.game_dir.glob(pat):
@@ -1331,11 +1331,11 @@ class GameEntry:
         patterns = [
             "*/*.exe",
             "*/*/*.exe",
-            "*/*/*/*.exe",
-            "*/*/*/*/*.exe",
-            "*/*/*/*/*/*.exe",
-            "*/*/*/*/*/*/*.exe",
-            "*/*/*/*/*/*/*/*.exe",
+            "**.exe",
+            "**/*.exe",
+            "**/*/*.exe",
+            "***.exe",
+            "***/*.exe",
         ]
         sub_exes: list[Path] = []
         for pat in patterns:
@@ -3187,7 +3187,7 @@ class MainWindow(QMainWindow):
         base = self.prefix_path / "drive_c" / "users"
         if not base.exists():
             return []
-        return list(base.glob("*/AppData/LocalLow/*/*/Player.log")) + list(base.glob("*/AppData/LocalLow/*/Player.log"))
+        return list(base.glob("*/AppData/LocalLowPlayer.log")) + list(base.glob("*/AppData/LocalLow/*/Player.log"))
 
     def latest_unity_player_log_for_game(self, game: GameEntry) -> Optional[Path]:
         candidates = self._unity_player_log_candidates()

@@ -16,6 +16,8 @@ import getpass
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional, Any
+import AVFoundation as AV
+
 
 
 from PyQt6.QtGui import QAction, QPixmap, QPainter, QIcon
@@ -179,6 +181,7 @@ class SettingsDialog(QDialog):
         self.mesa_dir_edit = QLineEdit(DEFAULT_MESA_DIR)
         self.dxmt_dir_edit = QLineEdit(DEFAULT_DXMT_DIR)
         self.vkd3d_dir_edit = QLineEdit(DEFAULT_VKD3D_DIR)
+        self.gptk_dir_edit = QLineEdit(DEFAULT_GPTK_DIR)
 
         form.addRow("Wine prefix", self._build_prefix_row(self.prefix_combo))
         form.addRow("DXVK source", self._browsable(self.dxvk_src_edit, dir=True))
@@ -188,6 +191,7 @@ class SettingsDialog(QDialog):
         form.addRow("Mesa x64 dir", self._browsable(self.mesa_dir_edit, dir=True))
         form.addRow("DXMT dir", self._browsable(self.dxmt_dir_edit, dir=True))
         form.addRow("VKD3D-Proton dir", self._browsable(self.vkd3d_dir_edit, dir=True))
+        form.addRow("GPTK dir", self._browsable(self.gptk_dir_edit, dir=True))
 
 
         return widget
@@ -345,6 +349,8 @@ class SettingsDialog(QDialog):
             self.dxmt_dir_edit.setText(parent.dxmt_dir_edit.text())
         if hasattr(parent, "vkd3d_dir_edit"):
             self.vkd3d_dir_edit.setText(parent.vkd3d_dir_edit.text())
+        if hasattr(parent, "gptk_dir_edit"):
+            self.gptk_dir_edit.setText(parent.gptk_dir_edit.text())
 
 
             
@@ -371,6 +377,8 @@ class SettingsDialog(QDialog):
             parent.dxmt_dir_edit.setText(self.dxmt_dir_edit.text())
         if hasattr(parent, "vkd3d_dir_edit"):
             parent.vkd3d_dir_edit.setText(self.vkd3d_dir_edit.text())
+        if hasattr(parent, "gptk_dir_edit"):
+            parent.gptk_dir_edit.setText(self.gptk_dir_edit.text())
 
     def log(self, message: str) -> None:
         self.log_view.appendPlainText(message)
@@ -757,6 +765,7 @@ DEFAULT_STEAM_SETUP = str(Path.home() / "Downloads" / "SteamSetup.exe")
 DEFAULT_MESA_DIR = str(Path.home() / "mesa" / "x64")
 DEFAULT_DXMT_DIR = str(Path.home() / "dxmt")
 DEFAULT_VKD3D_DIR = str(Path.home() / "vkd3d-proton")
+DEFAULT_GPTK_DIR = str(Path(__file__).resolve().with_name("gptk"))
 DXVK_DLLS = ("dxgi.dll", "d3d11.dll", "d3d10core.dll")
 
 DEFAULT_MESA_URL = "https://github.com/pal1000/mesa-dist-win/releases/download/23.1.9/mesa3d-23.1.9-release-msvc.7z"
@@ -770,6 +779,7 @@ LAUNCH_BACKEND_MESA_LLVMPIPE = "mesa:llvmpipe"
 LAUNCH_BACKEND_MESA_ZINK = "mesa:zink"
 LAUNCH_BACKEND_MESA_SWR = "mesa:swr"
 LAUNCH_BACKEND_VKD3D = "vkd3d-proton"
+LAUNCH_BACKEND_GPTK = "gptk"
 
 MESA_DRIVER_LLVMPIPE = "llvmpipe"
 MESA_DRIVER_ZINK = "zink"
@@ -784,6 +794,7 @@ LAUNCH_BACKENDS = (
     ("Mesa llvmpipe (CPU, safe)", LAUNCH_BACKEND_MESA_LLVMPIPE),
     ("Mesa zink (GPU, Vulkan)", LAUNCH_BACKEND_MESA_ZINK),
     ("Mesa swr (CPU rasterizer)", LAUNCH_BACKEND_MESA_SWR),
+    ("GPTK (D3DMetal)", LAUNCH_BACKEND_GPTK),
 )
 
 
@@ -993,6 +1004,8 @@ class DxvkBackend(Backend):
         env["WINEDLLOVERRIDES"] = "dxgi,d3d11,d3d10core=n,b"
         env["DXVK_LOG_PATH"] = str(Path.home() / "dxvk-logs")
         env["DXVK_LOG_LEVEL"] = "info"
+        env["DXVK_HDR"] = "0"
+        env["DXVK_STATE_CACHE"] = "0"
         env.pop("GALLIUM_DRIVER", None)
         env.pop("MESA_GLTHREAD", None)
         Path(env["DXVK_LOG_PATH"]).mkdir(parents=True, exist_ok=True)
@@ -1098,6 +1111,36 @@ class DxmtBackend(Backend):
 
         env.pop("DXVK_LOG_PATH", None)
         env.pop("DXVK_LOG_LEVEL", None)
+        env.pop("GALLIUM_DRIVER", None)
+        env.pop("MESA_GLTHREAD", None)
+        return env
+
+
+class GptkBackend(Backend):
+    backend_id = LAUNCH_BACKEND_GPTK
+    label = "GPTK (D3DMetal)"
+
+    def is_available(self, prefix: PrefixModel, game: GameModel, window: "MainWindow") -> bool:
+        dll_dir = window.gptk_windows_dir
+        return dll_dir.exists() and all((dll_dir / name).exists() for name in ("dxgi.dll", "d3d11.dll", "d3d12.dll"))
+
+    def prepare_game(self, prefix: PrefixModel, game: GameModel, window: "MainWindow") -> dict[str, Any]:
+        dll_dir = window.gptk_windows_dir
+        required = ("dxgi.dll", "d3d11.dll", "d3d12.dll")
+        if not dll_dir.exists() or not all((dll_dir / name).exists() for name in required):
+            raise RuntimeError("GPTK DLLs not found. Put GPTK Windows DLLs in gptk/lib/wine/x86_64-windows first.")
+        return {"kind": "gptk"}
+
+    def apply_env(self, env: dict[str, str], game: GameModel, prefix: PrefixModel, window: "MainWindow") -> dict[str, str]:
+        env = env.copy()
+        dll_dir = str(window.gptk_windows_dir)
+        env["WINEPREFIX"] = str(prefix.path)
+        env["WINEPATH"] = dll_dir
+        env["WINEDLLOVERRIDES"] = "dxgi,d3d11,d3d12=n,b"
+        env.pop("DXVK_LOG_PATH", None)
+        env.pop("DXVK_LOG_LEVEL", None)
+        env.pop("VKD3D_PROTON_PATH", None)
+        env.pop("DXMT_PATH", None)
         env.pop("GALLIUM_DRIVER", None)
         env.pop("MESA_GLTHREAD", None)
         return env
@@ -1233,12 +1276,21 @@ class GameEntry:
         sub_exes.sort(key=lambda p: p.stat().st_size, reverse=True)
         candidates.extend(sub_exes)
 
+        if "poppy playtime" in self.name.lower() or "poppy" in self.install_dir_name.lower():
+            for exe in candidates:
+                lowered = exe.name.lower()
+                if "shipping.exe" in lowered and "win64" in str(exe).lower():
+                    return exe
+
         for exe in candidates:
             try:
                 if exe.exists() and exe.is_file():
                     return exe
             except Exception:
                 continue
+
+        return None
+        
 
         return None
 
@@ -1349,6 +1401,15 @@ class GameEntry:
             if str(exe) not in seen:
                 seen.add(str(exe))
                 candidates.append(exe)
+
+        if "poppy playtime" in self.name.lower() or "poppy" in self.install_dir_name.lower():
+            candidates.sort(
+                key=lambda p: (
+                    0 if ("shipping.exe" in p.name.lower() and "win64" in str(p).lower()) else 1,
+                    0 if "shipping.exe" in p.name.lower() else 1,
+                    -p.stat().st_size if p.exists() else 0,
+                )
+            )
 
         return candidates
 
@@ -1842,7 +1903,7 @@ class MainWindow(QMainWindow):
         self.mesa_dir_edit = self.settings.mesa_dir_edit
         self.dxmt_dir_edit = self.settings.dxmt_dir_edit
         self.vkd3d_dir_edit = self.settings.vkd3d_dir_edit
-
+        self.gptk_dir_edit = self.settings.gptk_dir_edit
 
         self._cover_cache: dict[str, bytes] = {}      
         self._cover_failed: set[str] = set()            
@@ -1877,6 +1938,7 @@ class MainWindow(QMainWindow):
             MesaSwrBackend(),
             Vkd3dProtonBackend(),
             DxmtBackend(),
+            GptkBackend(),
         ):
             self.backend_registry.register(backend)
         self.backend_registry.register(AutoBackend(self.backend_registry))
@@ -1895,10 +1957,10 @@ class MainWindow(QMainWindow):
         token = f"{game.name} {game.install_path.name}".lower()
         exe_name = game.exe_path.name.lower() if game.exe_path else ""
 
+        if "poppy playtime" in token or "poppy_playtime" in exe_name:
+            return LAUNCH_BACKEND_DXVK
         if "mewgenics" in token:
             return LAUNCH_BACKEND_MESA_LLVMPIPE
-        if "detroit" in token or "unreal" in token:
-            return LAUNCH_BACKEND_DXMT
         if "enlisted" in token or exe_name == "enlisted.exe" or exe_name == "enlisted-min-cpu.exe":
             return LAUNCH_BACKEND_VKD3D
         if (game.install_path / "D3D12").exists():
@@ -1913,10 +1975,7 @@ class MainWindow(QMainWindow):
             return WineBuiltinBackend()
         if backend.backend_id == LAUNCH_BACKEND_AUTO and isinstance(backend, AutoBackend):
             return backend.resolve(prefix, game, self)
-        if backend.is_available(prefix, game, self):
-            return backend
-        fallback = self.backend_registry.get(LAUNCH_BACKEND_WINE)
-        return fallback if fallback is not None else WineBuiltinBackend()
+        return backend
 
     def _asset_path(self, filename: str) -> Optional[Path]:
         candidates = [
@@ -2571,6 +2630,14 @@ class MainWindow(QMainWindow):
     @property
     def vkd3d_dir(self) -> Path:
         return Path(self.vkd3d_dir_edit.text()).expanduser()
+
+    @property
+    def gptk_dir(self) -> Path:
+        return Path(self.gptk_dir_edit.text()).expanduser()
+
+    @property
+    def gptk_windows_dir(self) -> Path:
+        return self.gptk_dir / "lib" / "wine" / "x86_64-windows"
 
 
     def wine_env(self) -> dict[str, str]:
@@ -3441,6 +3508,7 @@ class MainWindow(QMainWindow):
         if not game:
             QMessageBox.warning(self, APP_NAME, "Select a game first.")
             return
+
         wine = self.ensure_wine()
         if not wine:
             return
@@ -3483,31 +3551,39 @@ class MainWindow(QMainWindow):
                         break
 
         resolved_backend = self.resolve_backend(backend_id, game_model, prefix_model)
-
+        effective_backend = resolved_backend.backend_id
+        effective_mesa_driver = ""
         try:
             prepare_info = resolved_backend.prepare_game(prefix_model, game_model, self)
         except Exception as exc:
             QMessageBox.warning(self, APP_NAME, str(exc))
             return
 
+        wine_bin = self.wine_binary()
+        self.log(f"Requested backend: {backend_id}")
+        self.log(f"Resolved backend: {effective_backend}")
+        self.log(f"Runner binary: {wine_bin or 'NONE'}")
+        if effective_backend == LAUNCH_BACKEND_GPTK:
+            self.log(f"GPTK DLL dir: {self.gptk_windows_dir}")
+
         effective_backend = resolved_backend.backend_id
         effective_mesa_driver = ""
         if isinstance(prepare_info, dict):
             effective_backend = str(prepare_info.get("kind", effective_backend)) if prepare_info.get("kind") in {"dxvk", "mesa"} else effective_backend
             effective_mesa_driver = str(prepare_info.get("driver", ""))
-            if prepare_info.get("kind") == "dxvk":
+            if prepare_info.get("kind") == "mesa":
+                effective_backend = resolved_backend.backend_id
+                effective_mesa_driver = prepare_info.get("driver", "")
+            elif prepare_info.get("kind") == "dxvk":
                 effective_backend = LAUNCH_BACKEND_DXVK
-            elif prepare_info.get("kind") == "mesa":
-                if effective_mesa_driver == MESA_DRIVER_ZINK:
-                    effective_backend = LAUNCH_BACKEND_MESA_ZINK
-                elif effective_mesa_driver == MESA_DRIVER_SWR:
-                    effective_backend = LAUNCH_BACKEND_MESA_SWR
-                else:
-                    effective_backend = LAUNCH_BACKEND_MESA_LLVMPIPE
-            elif prepare_info.get("kind") == "dxmt":
-                effective_backend = LAUNCH_BACKEND_DXMT
             elif prepare_info.get("kind") == "vkd3d-proton":
                 effective_backend = LAUNCH_BACKEND_VKD3D
+            elif prepare_info.get("kind") == "dxmt":
+                effective_backend = LAUNCH_BACKEND_DXMT
+            elif prepare_info.get("kind") == "gptk":
+                effective_backend = LAUNCH_BACKEND_GPTK
+
+        wine_bin = self.wine_binary()
 
         if self.game_process and self.game_process.state() != QProcess.ProcessState.NotRunning:
             QMessageBox.warning(self, APP_NAME, "A game process is already running.")
@@ -3594,11 +3670,29 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
+def request_microphone_permission() -> bool:
+    """Checks and requests microphone permission on macOS."""
+    if sys.platform != "darwin":
+        return True
+
+    try:
+        status = AV.AVCaptureDevice.authorizationStatusForMediaType_(AV.AVMediaTypeAudio)
+        if status == 0:  # AVAuthorizationStatusNotDetermined
+            AV.AVCaptureDevice.requestAccessForMediaType_completionHandler_(
+                AV.AVMediaTypeAudio, lambda granted: None
+            )
+            return False
+        return status == 3  # AVAuthorizationStatusAuthorized
+    except Exception:
+        return False
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet(MODERN_THEME)
     win = MainWindow()
+    request_microphone_permission()
     win.show()
     win.apply_ui_modes()
     return app.exec()

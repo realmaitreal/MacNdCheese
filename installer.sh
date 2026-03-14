@@ -10,10 +10,16 @@ DXVK_INSTALL64="${4:-}"
 DXVK_INSTALL32="${5:-}"
 MESA_DIR="${6:-}"
 MESA_URL="${7:-}"
+DXMT_DIR="${8:-}"
+DXMT_URL="${9:-}"
+VKD3D_DIR="${10:-}"
+VKD3D_URL="${11:-}"
 
 XQUARTZ_URL="https://github.com/XQuartz/XQuartz/releases/download/XQuartz-2.8.5/XQuartz-2.8.5.pkg"
 GSTREAMER_URL="https://gstreamer.freedesktop.org/data/pkg/osx/1.28.1/gstreamer-1.0-1.28.1-universal.pkg"
 WINE_STABLE_URL="https://github.com/Gcenx/macOS_Wine_builds/releases/download/11.0/wine-stable-11.0-osx64.tar.xz"
+DXMT_DEFAULT_URL="https://github.com/3Shain/dxmt/releases/latest/download/dxmt.tar.gz"
+VKD3D_DEFAULT_URL="https://github.com/HansKristian-Work/vkd3d-proton/releases/latest/download/vkd3d-proton-master.tar.zst"
 WORK_DIR="$(mktemp -d /tmp/macncheese-installer.XXXXXX)"
 BREW_BIN=""
 trap 'stop_sudo_keepalive; rm -rf "$WORK_DIR"' EXIT
@@ -35,6 +41,14 @@ fi
 
 if [ -n "$BREW_BIN" ]; then
   eval "$($BREW_BIN shellenv 2>/dev/null || true)"
+fi
+
+if [ -z "$DXMT_URL" ]; then
+  DXMT_URL="$DXMT_DEFAULT_URL"
+fi
+
+if [ -z "$VKD3D_URL" ]; then
+  VKD3D_URL="$VKD3D_DEFAULT_URL"
 fi
 
 sudo_run() {
@@ -178,7 +192,83 @@ install_gstreamer_pkg() {
 
 install_tools() {
   ensure_brew
-  "$BREW_BIN" install git meson ninja mingw-w64 glslang p7zip winetricks || true
+  "$BREW_BIN" install git meson ninja mingw-w64 glslang p7zip winetricks zstd || true
+}
+install_vkd3d() {
+  if [ -z "$VKD3D_DIR" ]; then
+    echo "Missing VKD3D-Proton target directory"
+    exit 1
+  fi
+
+  mkdir -p "$VKD3D_DIR"
+  archive="$WORK_DIR/vkd3d-proton.tar.zst"
+  unpack_dir="$WORK_DIR/vkd3d-proton"
+  rm -rf "$unpack_dir"
+  mkdir -p "$unpack_dir"
+
+  echo "Downloading VKD3D-Proton from $VKD3D_URL"
+  download_file "$VKD3D_URL" "$archive"
+
+  if command -v unzstd >/dev/null 2>&1; then
+    unzstd -f "$archive"
+    archive_tar="${archive%.zst}"
+  elif command -v zstd >/dev/null 2>&1; then
+    zstd -d -f "$archive" -o "${archive%.zst}"
+    archive_tar="${archive%.zst}"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - <<'PY' "$archive" "${archive%.zst}"
+import sys
+from pathlib import Path
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+try:
+    import zstandard as zstd
+except Exception:
+    raise SystemExit("Python zstandard module is required to unpack VKD3D-Proton .tar.zst archives")
+with src.open('rb') as fsrc, dst.open('wb') as fdst:
+    dctx = zstd.ZstdDecompressor()
+    dctx.copy_stream(fsrc, fdst)
+PY
+    archive_tar="${archive%.zst}"
+  else
+    echo "No zstd decompressor found. Install zstd via Homebrew first."
+    exit 1
+  fi
+
+  tar -xf "$archive_tar" -C "$unpack_dir"
+
+  found_dir=""
+  for candidate in \
+    "$unpack_dir" \
+    "$unpack_dir/x64" \
+    "$unpack_dir/lib" \
+    "$unpack_dir/lib64" \
+    "$unpack_dir/vkd3d-proton"; do
+    if [ -f "$candidate/d3d12.dll" ] && [ -f "$candidate/d3d12core.dll" ]; then
+      found_dir="$candidate"
+      break
+    fi
+  done
+
+  if [ -z "$found_dir" ]; then
+    found_dir="$(find "$unpack_dir" -type f \( -name d3d12.dll -o -name d3d12core.dll \) -print | head -n1 | xargs -I{} dirname "{}" 2>/dev/null || true)"
+  fi
+
+  if [ -z "$found_dir" ] || [ ! -f "$found_dir/d3d12.dll" ] || [ ! -f "$found_dir/d3d12core.dll" ]; then
+    echo "VKD3D-Proton archive did not contain the expected d3d12.dll and d3d12core.dll files"
+    exit 1
+  fi
+
+  echo "Installing VKD3D-Proton into $VKD3D_DIR"
+  rm -f "$VKD3D_DIR/d3d12.dll" "$VKD3D_DIR/d3d12core.dll" "$VKD3D_DIR/dxgi.dll"
+  cp -f "$found_dir/d3d12.dll" "$VKD3D_DIR/d3d12.dll"
+  cp -f "$found_dir/d3d12core.dll" "$VKD3D_DIR/d3d12core.dll"
+
+  if [ -f "$found_dir/dxgi.dll" ]; then
+    cp -f "$found_dir/dxgi.dll" "$VKD3D_DIR/dxgi.dll"
+  fi
+
+  echo "VKD3D-Proton installed successfully"
 }
 
 clone_dxvk_if_missing() {
@@ -275,6 +365,57 @@ install_mesa() {
   fi
 }
 
+install_dxmt() {
+  if [ -z "$DXMT_DIR" ]; then
+    echo "Missing DXMT target directory"
+    exit 1
+  fi
+
+  mkdir -p "$DXMT_DIR"
+  archive="$WORK_DIR/dxmt.tar.gz"
+  unpack_dir="$WORK_DIR/dxmt"
+  rm -rf "$unpack_dir"
+  mkdir -p "$unpack_dir"
+
+  echo "Downloading DXMT from $DXMT_URL"
+  download_file "$DXMT_URL" "$archive"
+  tar -xzf "$archive" -C "$unpack_dir"
+
+  found_dir=""
+  for candidate in \
+    "$unpack_dir" \
+    "$unpack_dir/dxmt" \
+    "$unpack_dir/bin" \
+    "$unpack_dir/lib"; do
+    if [ -f "$candidate/d3d11.dll" ] && [ -f "$candidate/dxgi.dll" ]; then
+      found_dir="$candidate"
+      break
+    fi
+  done
+
+  if [ -z "$found_dir" ]; then
+    found_dir="$(find "$unpack_dir" -type f \( -name d3d11.dll -o -name dxgi.dll \) -print | head -n1 | xargs -I{} dirname "{}" 2>/dev/null || true)"
+  fi
+
+  if [ -z "$found_dir" ] || [ ! -f "$found_dir/d3d11.dll" ] || [ ! -f "$found_dir/dxgi.dll" ]; then
+    echo "DXMT archive did not contain the expected d3d11.dll and dxgi.dll files"
+    exit 1
+  fi
+
+  echo "Installing DXMT into $DXMT_DIR"
+  rm -f "$DXMT_DIR/d3d11.dll" "$DXMT_DIR/dxgi.dll"
+  cp -f "$found_dir/d3d11.dll" "$DXMT_DIR/d3d11.dll"
+  cp -f "$found_dir/dxgi.dll" "$DXMT_DIR/dxgi.dll"
+
+  for extra in d3d10core.dll d3d12.dll; do
+    if [ -f "$found_dir/$extra" ]; then
+      cp -f "$found_dir/$extra" "$DXMT_DIR/$extra"
+    fi
+  done
+
+  echo "DXMT installed successfully"
+}
+
 init_prefix() {
   if [ -z "$PREFIX_DIR" ]; then
     echo "Missing prefix path"
@@ -325,6 +466,13 @@ case "$ACTION" in
     ;;
   install_mesa)
     install_mesa
+    ;;
+  install_dxmt)
+    install_dxmt
+    ;;
+  install_vkd3d)
+    install_tools
+    install_vkd3d
     ;;
   init_prefix)
     init_prefix

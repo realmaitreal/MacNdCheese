@@ -23,6 +23,7 @@ from PyQt6.QtGui import QAction, QPixmap, QPainter, QIcon
 from PyQt6.QtCore import QObject, QProcess, QProcessEnvironment, QThread, pyqtSignal, QPoint, QRect, QSize, Qt, QEvent, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QFormLayout,
@@ -421,64 +422,67 @@ class SettingsDialog(QDialog):
 
 MODERN_THEME = """
 QWidget {
-    background-color: #283141;
     color: #FFFFFF;
     font-family: "Inter", "Segoe UI", Arial, sans-serif;
     font-size: 13px;
 }
 
 QMainWindow, QDialog {
-    background-color: #283141;
+    background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1,
+                                      stop: 0 #1A1F2C, stop: 1 #0D0F16);
 }
 
 #Sidebar {
-    background-color: #1F2633;
-    border: none;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
+
 QLabel {
     background-color: transparent;
 }
 
 #SidebarButton {
     background-color: transparent;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 12px;
     padding: 6px 4px 4px 4px;
     margin: 2px 6px;
-    color: #A0AABF;
+    color: rgba(255, 255, 255, 0.6);
     font-size: 10px;
 }
 #SidebarButton:hover {
-    background-color: #2B384E;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     color: #FFFFFF;
 }
 #SidebarButton:checked {
-    background-color: #FF6600;
-    color: #FFFFFF;
+    background-color: rgba(0, 216, 214, 0.15);
+    border: 1px solid rgba(0, 216, 214, 0.5);
+    color: #00D8D6;
 }
 
 #AddContainerButton {
-    background-color: transparent;
-    border: 2px solid #3B4B68;
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 22px;
-    color: #A0AABF;
+    color: rgba(255, 255, 255, 0.8);
     font-size: 22px;
     font-weight: bold;
     padding: 0px;
     margin: 4px 8px;
 }
 #AddContainerButton:hover {
-    border-color: #00D8D6;
+    background-color: rgba(0, 216, 214, 0.15);
+    border: 1px solid rgba(0, 216, 214, 0.6);
     color: #00D8D6;
-    background-color: rgba(0,216,214,0.08);
 }
 #AddContainerButton::menu-indicator {
     image: none;
 }
 
 #Topbar {
-    background-color: #1F2633;
-    border: none;
+    background-color: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 #LogoText {
@@ -490,55 +494,54 @@ QLabel {
 
 #LogoM {
     background-color: transparent;
-    color: #1A202D;
+    color: rgba(255, 255, 255, 0.9);
     border-radius: 10px;
     border: none;
 }
 
 QLineEdit#SearchBar {
-    background-color: #283141;
-    border: 1px solid #3B4B68;
+    background-color: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
     padding: 7px 14px;
-    color: #A0AABF;
+    color: rgba(255, 255, 255, 0.8);
     font-size: 13px;
     min-width: 260px;
 }
 QLineEdit#SearchBar:focus {
-    border: 1px solid #00D8D6;
+    background-color: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(0, 216, 214, 0.6);
     color: #FFFFFF;
 }
 
 #TopBarBtn {
     background-color: transparent;
-    border: none;
-    color: #A0AABF;
+    border: 1px solid transparent;
+    color: rgba(255, 255, 255, 0.6);
     font-size: 18px;
     padding: 4px 6px;
     border-radius: 10px;
 }
 #TopBarBtn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     color: #00D8D6;
-    background-color: rgba(0,216,214,0.08);
 }
 
 #GameCard {
-    background-color: #1A202D;
+    background-color: rgba(255, 255, 255, 0.03);
     border-radius: 14px;
-    border: 2px solid transparent;
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 #GameCard:hover {
-    border: 2px solid rgba(0,216,214,0.6);
-    background-color: #1E2737;
+    background-color: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(0, 216, 214, 0.5);
 }
 
 #GameCoverLabel {
-    background-color: #131920;
+    background-color: transparent;
     border-radius: 14px;
 }
-
-
-
 
 #DialogTitle {
     font-size: 18px;
@@ -546,41 +549,25 @@ QLineEdit#SearchBar:focus {
     color: #FFFFFF;
 }
 
-#PlayBtn {
-    background-color: transparent;
-    border: 2px solid #FFFFFF;
+#PlayBtn, #InstallBtn {
+    background-color: rgba(0, 216, 214, 0.1);
+    border: 1px solid rgba(0, 216, 214, 0.4);
     border-radius: 20px;
-    color: #FFFFFF;
+    color: #00D8D6;
     font-size: 14px;
     font-weight: bold;
     padding: 8px 28px;
     min-width: 100px;
 }
-#PlayBtn:hover {
-    background-color: rgba(0,216,214,0.12);
-    border-color: #00D8D6;
-    color: #00D8D6;
-}
-
-#InstallBtn {
-    background-color: transparent;
-    border: 2px solid #FFFFFF;
-    border-radius: 20px;
+#PlayBtn:hover, #InstallBtn:hover {
+    background-color: rgba(0, 216, 214, 0.2);
+    border: 1px solid #00D8D6;
     color: #FFFFFF;
-    font-size: 14px;
-    font-weight: bold;
-    padding: 8px 28px;
-    min-width: 120px;
-}
-#InstallBtn:hover {
-    background-color: rgba(0,216,214,0.12);
-    border-color: #00D8D6;
-    color: #00D8D6;
 }
 
 QComboBox {
-    background-color: #3B4B68;
-    border: none;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
     padding: 5px 12px;
     color: #FFFFFF;
@@ -592,44 +579,47 @@ QComboBox::drop-down {
     width: 20px;
 }
 QComboBox QAbstractItemView {
-    background-color: #2B384E;
-    border: none;
+    background-color: #1A1F2C;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
-    selection-background-color: #3B4B68;
+    selection-background-color: rgba(0, 216, 214, 0.2);
     color: #FFFFFF;
 }
 
 QLineEdit {
-    background-color: #3B4B68;
-    border: none;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
     padding: 5px 12px;
     color: #FFFFFF;
     font-size: 13px;
 }
 QLineEdit:focus {
-    border: 1px solid #00D8D6;
+    background-color: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(0, 216, 214, 0.6);
 }
 
 QPushButton {
-    background-color: #3B4B68;
-    border: none;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
     padding: 8px 16px;
     color: #FFFFFF;
     font-weight: bold;
 }
 QPushButton:hover {
-    background-color: #4C6085;
+    background-color: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 QPushButton:pressed {
-    background-color: #00D8D6;
-    color: #1F2633;
+    background-color: rgba(0, 216, 214, 0.2);
+    border: 1px solid #00D8D6;
+    color: #FFFFFF;
 }
 
 QMenu {
-    background-color: #2B384E;
-    border: none;
+    background-color: rgba(26, 31, 44, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     padding: 6px;
 }
@@ -640,26 +630,29 @@ QMenu::item {
     border-radius: 8px;
 }
 QMenu::item:selected {
-    background-color: #3B4B68;
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 QScrollArea {
     border: none;
     background-color: transparent;
 }
+QScrollArea > QWidget > QWidget {
+    background-color: transparent;
+}
 QScrollBar:vertical {
     border: none;
-    background: #1F2633;
+    background: rgba(0, 0, 0, 0.1);
     width: 8px;
     border-radius: 4px;
 }
 QScrollBar::handle:vertical {
-    background: #3B4B68;
+    background: rgba(255, 255, 255, 0.2);
     min-height: 20px;
     border-radius: 4px;
 }
 QScrollBar::handle:vertical:hover {
-    background: #4C6085;
+    background: rgba(255, 255, 255, 0.3);
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     border: none;
@@ -667,12 +660,12 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 }
 QScrollBar:horizontal {
     border: none;
-    background: #1F2633;
+    background: rgba(0, 0, 0, 0.1);
     height: 8px;
     border-radius: 4px;
 }
 QScrollBar::handle:horizontal {
-    background: #3B4B68;
+    background: rgba(255, 255, 255, 0.2);
     min-width: 20px;
     border-radius: 4px;
 }
@@ -682,13 +675,13 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
 }
 
 #StatusBar {
-    background-color: #1A202D;
-    border: none;
+    background-color: rgba(255, 255, 255, 0.03);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 #LogBtn {
     background-color: transparent;
     border: none;
-    color: #A0AABF;
+    color: rgba(255, 255, 255, 0.6);
     font-size: 12px;
     font-weight: bold;
     padding: 0px 6px;
@@ -696,29 +689,29 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
 }
 #LogBtn:hover {
     color: #00D8D6;
-    background-color: rgba(0,216,214,0.06);
+    background-color: rgba(0, 216, 214, 0.06);
 }
 #StatusText {
-    color: #A0AABF;
+    color: rgba(255, 255, 255, 0.6);
     font-size: 11px;
 }
 #VersionLabel {
-    color: #A0AABF;
+    color: rgba(255, 255, 255, 0.5);
     font-size: 11px;
 }
 
 #IconSelectorBtn {
-    background-color: #3B4B68;
-    border: 2px solid transparent;
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 24px;
     padding: 4px;
 }
 #IconSelectorBtn:checked {
-    border: 2px solid #00D8D6;
-    background-color: #2B384E;
+    border: 1px solid rgba(0, 216, 214, 0.6);
+    background-color: rgba(0, 216, 214, 0.1);
 }
 #IconSelectorBtn:hover {
-    border: 2px solid #A0AABF;
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 #SteamTitle {
@@ -729,20 +722,20 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
 }
 
 QTabWidget::pane {
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
-    background-color: #283141;
+    background-color: rgba(255, 255, 255, 0.03);
 }
 QTabBar::tab {
-    background-color: #1F2633;
-    color: #A0AABF;
+    background-color: transparent;
+    color: rgba(255, 255, 255, 0.6);
     padding: 8px 16px;
     border: none;
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
 }
 QTabBar::tab:selected {
-    background-color: #283141;
+    background-color: rgba(255, 255, 255, 0.05);
     color: #00D8D6;
     border-bottom: 2px solid #00D8D6;
 }
@@ -751,20 +744,20 @@ QTabBar::tab:hover {
 }
 
 QPlainTextEdit {
-    background-color: #1A202D;
-    color: #A0AABF;
-    border: none;
+    background-color: rgba(0, 0, 0, 0.2);
+    color: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
     font-family: monospace;
     font-size: 12px;
 }
 
 QGroupBox {
-    border: 1px solid #3B4B68;
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
     margin-top: 8px;
     padding-top: 8px;
-    color: #A0AABF;
+    color: rgba(255, 255, 255, 0.8);
     font-weight: bold;
 }
 QGroupBox::title {
@@ -775,7 +768,7 @@ QGroupBox::title {
 """
 
 APP_NAME = "MacNCheese"
-APP_VERSION = "v2.0.0"
+APP_VERSION = "v4.4.2"
 GITHUB_REPO = "mont127/MacNdCheese"
 GITHUB_LATEST_RELEASE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases"
@@ -1594,7 +1587,7 @@ class SteamScanner:
                 continue
             for manifest in sorted(steamapps.glob("appmanifest_*.acf")):
                 entry = cls.parse_appmanifest(manifest)
-                if entry:
+                if entry and entry.appid != "228980":
                     games.append(entry)
         games.sort(key=lambda g: g.name.lower())
         return games
@@ -1630,7 +1623,7 @@ class CreateBottleDialog(QDialog):
         name_group = QVBoxLayout()
         name_group.setSpacing(8)
         name_lbl = QLabel("Bottle Name")
-        name_lbl.setStyleSheet("color: #A0AABF; font-size: 12px; font-weight: bold;")
+        name_lbl.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 12px; font-weight: bold;")
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("e.g. Cool Library")
         name_group.addWidget(name_lbl)
@@ -1641,7 +1634,7 @@ class CreateBottleDialog(QDialog):
         path_group = QVBoxLayout()
         path_group.setSpacing(8)
         path_lbl = QLabel("Bottle Prefix (Path)")
-        path_lbl.setStyleSheet("color: #A0AABF; font-size: 12px; font-weight: bold;")
+        path_lbl.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 12px; font-weight: bold;")
         
         path_row = QHBoxLayout()
         self.path_edit = QLineEdit()
@@ -1660,7 +1653,7 @@ class CreateBottleDialog(QDialog):
         exe_group = QVBoxLayout()
         exe_group.setSpacing(8)
         exe_lbl = QLabel("Installer .exe (Optional)")
-        exe_lbl.setStyleSheet("color: #A0AABF; font-size: 12px; font-weight: bold;")
+        exe_lbl.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 12px; font-weight: bold;")
         
         exe_row = QHBoxLayout()
         self.exe_edit = QLineEdit()
@@ -1679,7 +1672,7 @@ class CreateBottleDialog(QDialog):
         win_group = QVBoxLayout()
         win_group.setSpacing(8)
         win_lbl = QLabel("Windows Version")
-        win_lbl.setStyleSheet("color: #A0AABF; font-size: 12px; font-weight: bold;")
+        win_lbl.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 12px; font-weight: bold;")
         self.win_combo = QComboBox()
         for v in ["Windows 10", "Windows 11", "Windows 7", "Windows 8.1"]:
             self.win_combo.addItem(v)
@@ -1691,7 +1684,7 @@ class CreateBottleDialog(QDialog):
         icons_group = QVBoxLayout()
         icons_group.setSpacing(8)
         icons_lbl = QLabel("Platform")
-        icons_lbl.setStyleSheet("color: #A0AABF; font-size: 12px; font-weight: bold;")
+        icons_lbl.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 12px; font-weight: bold;")
         
         icons_row = QHBoxLayout()
         self.icon_group = QButtonGroup(self)
@@ -1765,7 +1758,7 @@ class GameLaunchDialog(QDialog):
         cover_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cover_lbl.setFixedSize(160, 240)
         cover_lbl.setScaledContents(False)
-        cover_lbl.setStyleSheet("background-color: #131920; border-radius: 14px;")
+        cover_lbl.setStyleSheet("background-color: transparent; border-radius: 14px;")
         
         if hasattr(parent, "_cover_cache") and game.appid in parent._cover_cache:
             try:
@@ -1794,7 +1787,7 @@ class GameLaunchDialog(QDialog):
         
                       
         info_lbl = QLabel("0.0 hours played \nLast played: Never")
-        info_lbl.setStyleSheet("color: #A0AABF; font-size: 12px; line-height: 1.5;")
+        info_lbl.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 12px; line-height: 1.5;")
         right_layout.addWidget(info_lbl)
         
         right_layout.addStretch()
@@ -1806,7 +1799,7 @@ class GameLaunchDialog(QDialog):
                           
         back_row = QHBoxLayout()
         back_lbl = QLabel("Backend:")
-        back_lbl.setStyleSheet("color: #A0AABF; font-size: 13px; font-weight: bold; width: 60px;")
+        back_lbl.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 13px; font-weight: bold; width: 60px;")
         self.backend_combo = QComboBox()
         for label, value in LAUNCH_BACKENDS:
             self.backend_combo.addItem(label, value)
@@ -1816,7 +1809,7 @@ class GameLaunchDialog(QDialog):
 
         exe_row = QHBoxLayout()
         exe_lbl = QLabel("EXE:")
-        exe_lbl.setStyleSheet("color: #A0AABF; font-size: 13px; font-weight: bold; width: 60px;")
+        exe_lbl.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 13px; font-weight: bold; width: 60px;")
         self.exe_combo = QComboBox()
         self.exe_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.exe_combo.setToolTip("Select which executable to launch")
@@ -1853,7 +1846,7 @@ class GameLaunchDialog(QDialog):
                     
         args_row = QHBoxLayout()
         args_lbl = QLabel("Args:")
-        args_lbl.setStyleSheet("color: #A0AABF; font-size: 13px; font-weight: bold; width: 60px;")
+        args_lbl.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 13px; font-weight: bold; width: 60px;")
         self.args_edit = QLineEdit()
         self.args_edit.setPlaceholderText("Optional game arguments...")
         args_row.addWidget(args_lbl)
@@ -1912,6 +1905,33 @@ class GameLaunchDialog(QDialog):
             p.launch_selected_game(self.game, backend_id=backend_id, extra_args=args)
         self.accept()
 
+class UpdateChecker(QThread):
+    update_available = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def run(self):
+        try:
+            ctx = ssl._create_unverified_context()
+            
+            req = urllib.request.Request(GITHUB_LATEST_RELEASE_API, headers={'User-Agent': f'{APP_NAME}-Updater'})
+            with urllib.request.urlopen(req, timeout=5, context=ctx) as response:
+                if response.status == 200:
+                    data = json.loads(response.read().decode())
+                    tag = data.get("tag_name", "")
+                    if tag:
+                        current_clean = APP_VERSION.lstrip('v')
+                        latest_clean = tag.lstrip('v')
+                        
+                        def version_tuple(v):
+                            return tuple(int(x) if x.isdigit() else x for x in v.split('.'))
+
+                        if version_tuple(latest_clean) > version_tuple(current_clean):
+                            self.update_available.emit(tag)
+        except Exception as e:
+            print(f"Update check failed: {e}")
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -1954,7 +1974,52 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._build_menu()
+        self.load_user_settings()
+        self.startup_update_check()
         self.log(f"{APP_NAME} ready")
+
+    def load_user_settings(self) -> None:
+        self.user_settings_path = Path.home() / ".macncheese_settings.json"
+        self.skip_update_check = False
+        if self.user_settings_path.exists():
+            try:
+                data = json.loads(self.user_settings_path.read_text())
+                self.skip_update_check = data.get("skip_update_check", False)
+            except Exception:
+                pass
+
+    def save_user_settings(self) -> None:
+        try:
+            data = {"skip_update_check": self.skip_update_check}
+            self.user_settings_path.write_text(json.dumps(data))
+        except Exception:
+            pass
+
+    def startup_update_check(self):
+        if not self.skip_update_check:
+            self.update_checker = UpdateChecker(self)
+            self.update_checker.update_available.connect(self.show_update_dialog)
+            self.update_checker.start()
+
+    def show_update_dialog(self, latest_version: str):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Update Available")
+        msg.setText(f"A new version of {APP_NAME} ({latest_version}) is available!\\nWould you like to update now?")
+        
+        update_btn = msg.addButton("Update", QMessageBox.ButtonRole.AcceptRole)
+        cancel_btn = msg.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        
+        cb = QCheckBox("Don't ask me again")
+        msg.setCheckBox(cb)
+        
+        msg.exec()
+        
+        if cb.isChecked():
+            self.skip_update_check = True
+            self.save_user_settings()
+            
+        if msg.clickedButton() == update_btn:
+            webbrowser.open(GITHUB_RELEASES_URL)
 
     def _register_components(self) -> None:
         for component in (
@@ -2137,6 +2202,13 @@ class MainWindow(QMainWindow):
 
         topbar_layout.addSpacing(32)
 
+        self.btn_top_launch_steam = QPushButton(" Steam")
+        self.btn_top_launch_steam.setObjectName("TopBarBtn")
+        self.btn_top_launch_steam.setToolTip("Launch Steam")
+        self._set_button_icon_from_asset(self.btn_top_launch_steam, "Steam.png", size=20)
+        self.btn_top_launch_steam.clicked.connect(self.launch_steam)
+        topbar_layout.addWidget(self.btn_top_launch_steam)
+
         self.search_bar = QLineEdit()
         self.search_bar.setObjectName("SearchBar")
         self.search_bar.setPlaceholderText("Search games...")
@@ -2245,7 +2317,7 @@ class MainWindow(QMainWindow):
     def _build_steam_landing_view(self) -> None:
                                                                                                      
         self.steam_view = QWidget()
-        self.steam_view.setStyleSheet("background-color: #283141;")
+        self.steam_view.setStyleSheet("background-color: transparent;")
         steam_layout = QVBoxLayout(self.steam_view)
         steam_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         steam_layout.setSpacing(0)
@@ -2417,7 +2489,7 @@ class MainWindow(QMainWindow):
         cover_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cover_lbl.setFixedSize(150, 225)
         cover_lbl.setScaledContents(False)
-        cover_lbl.setStyleSheet("background-color: #131920; border-radius: 14px;")
+        cover_lbl.setStyleSheet("background-color: transparent; border-radius: 14px;")
 
         def _apply_pixmap(data: bytes, lbl: QLabel = cover_lbl) -> None:
             try:
@@ -2512,7 +2584,7 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         action_setup_btn = QWidgetAction(menu)
         setup_btn = QPushButton("One Click SetUp")
-        setup_btn.setStyleSheet("background-color: #FF6600; font-weight: bold; border-radius: 12px; padding: 6px;")
+        setup_btn.setStyleSheet("background-color: rgba(255, 102, 0, 0.8); font-weight: bold; border-radius: 12px; padding: 6px;")
         setup_btn.clicked.connect(self.quick_setup)
         setup_btn.clicked.connect(menu.close)
         container = QWidget()
@@ -2990,11 +3062,12 @@ class MainWindow(QMainWindow):
 
     def check_for_updates(self) -> None:
         try:
+            ctx = ssl._create_unverified_context()
             req = urllib.request.Request(
                 GITHUB_LATEST_RELEASE_API,
                 headers={"Accept": "application/vnd.github+json", "User-Agent": APP_NAME},
             )
-            with urllib.request.urlopen(req, timeout=8) as response:
+            with urllib.request.urlopen(req, timeout=8, context=ctx) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             latest_tag = str(payload.get("tag_name") or "").strip()
             release_url = str(payload.get("html_url") or GITHUB_RELEASES_URL)

@@ -213,6 +213,18 @@ class MainWindow(InstallerOps, RuntimeOps, QMainWindow):
                 return str(candidate)
         return "wineserver"
 
+    def meson_binary(self) -> str:
+        for candidate in (shutil.which("meson"), "/opt/homebrew/bin/meson", "/usr/local/bin/meson"):
+            if candidate and Path(candidate).exists():
+                return str(candidate)
+        raise FileNotFoundError("meson not found. Run 'Install Tools' first.")
+
+    def ninja_binary(self) -> str:
+        for candidate in (shutil.which("ninja"), "/opt/homebrew/bin/ninja", "/usr/local/bin/ninja"):
+            if candidate and Path(candidate).exists():
+                return str(candidate)
+        raise FileNotFoundError("ninja not found. Run 'Install Tools' first.")
+
     def ensure_wine(self) -> Optional[str]:
         try:
             return self.wine_binary()

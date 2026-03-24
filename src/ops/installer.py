@@ -170,17 +170,15 @@ class InstallerOps:
             f"fi"
         )
 
+        meson = self.meson_binary()
+        ninja = self.ninja_binary()
+
         meson_args = [
-            "meson",
-            "setup",
-            str(build_dir),
-            str(src),
-            "--cross-file",
-            str(cross_file),
-            "--prefix",
-            str(install),
-            "--buildtype",
-            "release",
+            meson, "setup",
+            str(build_dir), str(src),
+            "--cross-file", str(cross_file),
+            "--prefix", str(install),
+            "--buildtype", "release",
             "-Denable_d3d9=false",
         ]
 
@@ -193,8 +191,8 @@ class InstallerOps:
         commands = [
             ["bash", "-lc", clone_script],
             meson_args,
-            ["ninja", "-C", str(build_dir)],
-            ["ninja", "-C", str(build_dir), "install"],
+            [ninja, "-C", str(build_dir)],
+            [ninja, "-C", str(build_dir), "install"],
         ]
 
         self.log(f"Building DXVK ({arch}) in: {build_dir}")

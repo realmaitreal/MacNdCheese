@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import os
 import shlex
+import stat
+import subprocess
+import tempfile
 from pathlib import Path
 
 from PyQt6.QtWidgets import QMessageBox
@@ -9,20 +13,51 @@ from constants import APP_NAME, DEFAULT_MESA_URL, DXVK_MACOS_REPO
 
 
 class InstallerOps:
+    def _prompt_admin_env(self) -> dict[str, str] | None:
+        """Show a native macOS password dialog and return an env dict with SUDO_ASKPASS set.
+
+        Returns None if the user cancels.
+        """
+        result = subprocess.run(
+            [
+                "osascript", "-e",
+                'display dialog "MacNCheese needs your administrator password to install Wine." '
+                'default answer "" with hidden answer '
+                'with title "Administrator Password" '
+                'buttons {"Cancel", "OK"} default button "OK"',
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0 or "text returned:" not in result.stdout:
+            return None
+
+        password = result.stdout.strip().split("text returned:", 1)[1].strip()
+
+        fd, askpass_path = tempfile.mkstemp(suffix=".sh", prefix="macncheese_")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(f"#!/bin/sh\nprintf '%s\\n' {shlex.quote(password)}\n")
+            os.chmod(askpass_path, stat.S_IRWXU)
+        except Exception:
+            return None
+
+        self._askpass_path: str | None = askpass_path
+        env = os.environ.copy()
+        env["SUDO_ASKPASS"] = askpass_path
+        return env
     def install_tools(self) -> None:
         self.run_commands(
             [["bash", "-lc", "brew install git meson ninja mingw-w64 glslang p7zip winetricks"]]
         )
 
     def install_wine(self) -> None:
+        env = self._prompt_admin_env()
+        if env is None:
+            return
         self.run_commands(
-            [
-                [
-                    "bash",
-                    "-lc",
-                    "brew install --cask xquartz || true; brew install --cask wine-stable || brew install wine-stable",
-                ]
-            ]
+            [["bash", "-lc", "brew install --cask xquartz || true; brew install --cask wine-stable || brew install wine-stable"]],
+            env=env,
         )
 
     def install_mesa(self) -> None:

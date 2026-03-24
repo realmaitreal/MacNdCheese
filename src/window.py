@@ -38,6 +38,7 @@ class MainWindow(InstallerOps, RuntimeOps, QMainWindow):
 
         self.worker_thread: Optional[QThread] = None
         self.worker: Optional[CommandWorker] = None
+        self._askpass_path: Optional[str] = None
         self.steam_process: Optional[QProcess] = None
         self.game_process: Optional[QProcess] = None
         self.games: list[GameEntry] = []
@@ -266,6 +267,12 @@ class MainWindow(InstallerOps, RuntimeOps, QMainWindow):
         self.worker_thread.start()
 
     def on_worker_finished(self, ok: bool, message: str) -> None:
+        if self._askpass_path:
+            try:
+                os.unlink(self._askpass_path)
+            except Exception:
+                pass
+            self._askpass_path = None
         self.set_status(message if ok else f"Failed: {message}")
         if not ok:
             QMessageBox.warning(self, APP_NAME, message)

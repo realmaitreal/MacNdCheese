@@ -4,6 +4,12 @@ MacNCheese manages Wine alongside custom graphics dependencies (ex. MoltenVK, D3
 
 ## FAQ
 
+### What makes macndcheese uniqe and niche?
+
+It uses dual runtime for steam and the game
+>Dual runtime is a way to play steam games by initilazing steam without any extra dll files and using WINEDLLOVERRIDES macndcheese is able to launch the game with graphical dll files.
+
+
 ### Is this a replacement for CrossOver?
 
 No. MacNCheese is not trying to be a full commercial compatibility suite. It is more of a focused launcher for Steam and Wine environments on macOS.

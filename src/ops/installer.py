@@ -7,6 +7,17 @@ from PyQt6.QtWidgets import QMessageBox
 
 from constants import APP_NAME, DEFAULT_MESA_URL, DXVK_MACOS_REPO
 
+_BREW = "export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+
+def _admin_cmd(shell_script: str) -> list[str]:
+    """Wrap a shell script in osascript to show the native macOS admin password dialog."""
+    escaped = shell_script.replace("\\", "\\\\").replace('"', '\\"')
+    return [
+        "osascript", "-e",
+        f'do shell script "{_BREW}; {escaped}" with administrator privileges',
+    ]
+
 
 class InstallerOps:
     def install_tools(self) -> None:
@@ -17,11 +28,10 @@ class InstallerOps:
     def install_wine(self) -> None:
         self.run_commands(
             [
-                [
-                    "bash",
-                    "-lc",
-                    "brew install --cask xquartz || true; brew install --cask wine-stable || brew install wine-stable",
-                ]
+                _admin_cmd(
+                    "brew install --cask xquartz || true;"
+                    " brew install --cask wine-stable || brew install wine-stable"
+                )
             ]
         )
 
@@ -76,11 +86,14 @@ class InstallerOps:
 
         src.parent.mkdir(parents=True, exist_ok=True)
 
+        cask_script = (
+            "brew install --cask xquartz || true;"
+            " brew install --cask wine-stable || brew install wine-stable || true"
+        )
+
         script = (
             "set -euo pipefail; "
             "brew install git meson ninja mingw-w64 glslang p7zip winetricks || true; "
-            "brew install --cask xquartz || true; "
-            "brew install --cask wine-stable || brew install wine-stable || true; "
             f"if [ -d {shlex.quote(str(src / '.git'))} ]; then "
             f"  git -C {shlex.quote(str(src))} pull; "
             f"else "
@@ -106,7 +119,11 @@ class InstallerOps:
             f"fi"
         )
 
-        self.run_commands([["bash", "-lc", script]], env=None, cwd=str(src.parent))
+        self.run_commands(
+            [_admin_cmd(cask_script), ["bash", "-lc", script]],
+            env=None,
+            cwd=str(src.parent),
+        )
 
     def _build_dxvk(self, *, arch: str) -> None:
         wine = self.ensure_wine()

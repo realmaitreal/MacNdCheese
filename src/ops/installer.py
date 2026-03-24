@@ -1,38 +1,66 @@
 from __future__ import annotations
 
+import os
 import shlex
+import stat
+import subprocess
+import tempfile
 from pathlib import Path
 
 from PyQt6.QtWidgets import QMessageBox
 
 from constants import APP_NAME, DEFAULT_MESA_URL, DXVK_MACOS_REPO
 
-_BREW = "export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH"
-
-
-def _admin_cmd(shell_script: str) -> list[str]:
-    """Wrap a shell script in osascript to show the native macOS admin password dialog."""
-    escaped = shell_script.replace("\\", "\\\\").replace('"', '\\"')
-    return [
-        "osascript", "-e",
-        f'do shell script "{_BREW}; {escaped}" with administrator privileges',
-    ]
-
 
 class InstallerOps:
+    def _prompt_admin_env(self) -> dict[str, str] | None:
+        """Show a native macOS password dialog and return an env dict with SUDO_ASKPASS set.
+
+        When brew installs a cask it calls sudo internally. Since the app has no
+        terminal, sudo cannot read the password from stdin. Setting SUDO_ASKPASS to
+        a helper script that echoes the password lets sudo authenticate without a
+        terminal.  Returns None if the user cancels.
+        """
+        result = subprocess.run(
+            [
+                "osascript", "-e",
+                'display dialog "MacNCheese needs your administrator password to install Wine." '
+                'default answer "" with hidden answer '
+                'with title "Administrator Password" '
+                'buttons {"Cancel", "OK"} default button "OK"',
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0 or "text returned:" not in result.stdout:
+            return None  # user cancelled
+
+        password = result.stdout.strip().split("text returned:", 1)[1].strip()
+
+        fd, askpass_path = tempfile.mkstemp(suffix=".sh", prefix="macncheese_")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(f"#!/bin/sh\nprintf '%s\\n' {shlex.quote(password)}\n")
+            os.chmod(askpass_path, stat.S_IRWXU)
+        except Exception:
+            return None
+
+        self._askpass_path: str | None = askpass_path
+        env = os.environ.copy()
+        env["SUDO_ASKPASS"] = askpass_path
+        return env
     def install_tools(self) -> None:
         self.run_commands(
             [["bash", "-lc", "brew install git meson ninja mingw-w64 glslang p7zip winetricks"]]
         )
 
     def install_wine(self) -> None:
+        env = self._prompt_admin_env()
+        if env is None:
+            return
         self.run_commands(
-            [
-                _admin_cmd(
-                    "brew install --cask xquartz || true;"
-                    " brew install --cask wine-stable || brew install wine-stable"
-                )
-            ]
+            [["bash", "-lc", "brew install --cask xquartz || true; brew install --cask wine-stable || brew install wine-stable"]],
+            env=env,
         )
 
     def install_mesa(self) -> None:
@@ -119,9 +147,15 @@ class InstallerOps:
             f"fi"
         )
 
+        env = self._prompt_admin_env()
+        if env is None:
+            return
         self.run_commands(
-            [_admin_cmd(cask_script), ["bash", "-lc", script]],
-            env=None,
+            [
+                ["bash", "-lc", cask_script],
+                ["bash", "-lc", script],
+            ],
+            env=env,
             cwd=str(src.parent),
         )
 
@@ -152,20 +186,17 @@ class InstallerOps:
             f"fi"
         )
 
+        meson = self.meson_binary()
+        ninja = self.ninja_binary()
+
         meson_args = [
-            "meson",
-            "setup",
-            str(build_dir),
-            str(src),
-            "--cross-file",
-            str(cross_file),
-            "--prefix",
-            str(install),
-            "--buildtype",
-            "release",
+            meson, "setup",
+            str(build_dir), str(src),
+            "--cross-file", str(cross_file),
+            "--prefix", str(install),
+            "--buildtype", "release",
             "-Denable_d3d9=false",
         ]
-
         if build_dir.exists():
             if coredata.exists():
                 meson_args.append("--reconfigure")
@@ -175,8 +206,8 @@ class InstallerOps:
         commands = [
             ["bash", "-lc", clone_script],
             meson_args,
-            ["ninja", "-C", str(build_dir)],
-            ["ninja", "-C", str(build_dir), "install"],
+            [ninja, "-C", str(build_dir)],
+            [ninja, "-C", str(build_dir), "install"],
         ]
 
         self.log(f"Building DXVK ({arch}) in: {build_dir}")

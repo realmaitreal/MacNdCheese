@@ -38,6 +38,7 @@ class MainWindow(InstallerOps, RuntimeOps, QMainWindow):
 
         self.worker_thread: Optional[QThread] = None
         self.worker: Optional[CommandWorker] = None
+        self._askpass_path: Optional[str] = None
         self.steam_process: Optional[QProcess] = None
         self.game_process: Optional[QProcess] = None
         self.games: list[GameEntry] = []
@@ -212,6 +213,18 @@ class MainWindow(InstallerOps, RuntimeOps, QMainWindow):
                 return str(candidate)
         return "wineserver"
 
+    def meson_binary(self) -> str:
+        for candidate in (shutil.which("meson"), "/opt/homebrew/bin/meson", "/usr/local/bin/meson"):
+            if candidate and Path(candidate).exists():
+                return str(candidate)
+        raise FileNotFoundError("meson not found. Run 'Install Tools' first.")
+
+    def ninja_binary(self) -> str:
+        for candidate in (shutil.which("ninja"), "/opt/homebrew/bin/ninja", "/usr/local/bin/ninja"):
+            if candidate and Path(candidate).exists():
+                return str(candidate)
+        raise FileNotFoundError("ninja not found. Run 'Install Tools' first.")
+
     def ensure_wine(self) -> Optional[str]:
         try:
             return self.wine_binary()
@@ -266,6 +279,12 @@ class MainWindow(InstallerOps, RuntimeOps, QMainWindow):
         self.worker_thread.start()
 
     def on_worker_finished(self, ok: bool, message: str) -> None:
+        if self._askpass_path:
+            try:
+                os.unlink(self._askpass_path)
+            except Exception:
+                pass
+            self._askpass_path = None
         self.set_status(message if ok else f"Failed: {message}")
         if not ok:
             QMessageBox.warning(self, APP_NAME, message)

@@ -57,8 +57,7 @@ MacNCheese is a free launcher that runs Windows games on macOS using Wine. It au
 ### Is it free?
 100% free and open source, forever.
 
-### Is it better than CrossOver?
-CrossOver is a paid product with official support. MacNCheese is free and community-built. For casual gaming it works great — but if you need professional support, CrossOver exists for that.
+
 
 ### Is it a replacement for Whisky?
 No not at all its a one of its own architectures and is completely different steam launch you can call this "Proton that mac never had"

@@ -15,11 +15,14 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 block_cipher = None
 
 a = Analysis(
-    ['src/main.py'],
+    ['MacNdCheeseARM.py'],
     pathex=['.'],
     binaries=[],
     datas=[
-        # if we ever ship binaries manually add them here
+        ('installer.sh', '.'),
+        *([('Add.png', '.')] if __import__('os').path.exists('Add.png') else []),
+        *([('Wine.png', '.')] if __import__('os').path.exists('Wine.png') else []),
+        *([('Steam.png', '.')] if __import__('os').path.exists('Steam.png') else []),
     ],
     hiddenimports=[
         # PyQt6 sometimes needs these nudged explicitly
@@ -29,20 +32,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # runner doesn't have these
         'tkinter',
-        'unittest',
-        'email',
-        'html',
-        'http',
-        'xml',
-        'pydoc',
-        'doctest',
-        'difflib',
-        'ftplib',
-        'imaplib',
-        'smtplib',
-        'telnetlib',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -95,6 +85,7 @@ app = BUNDLE(
         'CFBundleVersion': '0.1.0',
         'CFBundleShortVersionString': '0.1.0',
         'NSHighResolutionCapable': True,
+        'NSMicrophoneUsageDescription': 'MacNCheese requests microphone access for game audio compatibility.',
         'NSRequiresAquaSystemAppearance': False,  # allows dark mode
         'LSMinimumSystemVersion': '11.0',
         # Suppress the "damaged app" prompt on first launch for

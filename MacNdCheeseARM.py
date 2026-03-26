@@ -39,7 +39,9 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QPlainTextEdit,
+    QProgressBar,
     QSplitter,
+    QStyle,
     QVBoxLayout,
     QWidget,
     QDialog,
@@ -295,11 +297,11 @@ class SettingsDialog(QDialog):
         self.install_tools_btn = QPushButton("Install Tools")
         self.install_wine_btn = QPushButton("Install Wine")
         self.install_mesa_btn = QPushButton("Install Mesa")
-        self.build_dxvk_btn = QPushButton("Build DXVK (64-bit)")
-        self.build_dxvk32_btn = QPushButton("Build DXVK (32-bit)")
+        self.build_dxvk_btn = QPushButton("Install DXVK")
+        self.build_dxvk32_btn = QPushButton("Install DXVK")  # kept for compatibility
         self.init_prefix_btn = QPushButton("Init Prefix")
         self.install_steam_btn = QPushButton("Install Steam")
-        hint = QLabel("Installs tools, Wine, builds DXVK (64/32), then installs Mesa.")
+        hint = QLabel("Installs Wine, downloads prebuilt DXVK, then installs Mesa.")
         hint.setWordWrap(True)
         quick_layout.addWidget(self.quick_setup_btn)
         quick_layout.addWidget(hint)
@@ -311,9 +313,8 @@ class SettingsDialog(QDialog):
         grid.addWidget(self.install_wine_btn, 0, 1)
         grid.addWidget(self.install_mesa_btn, 1, 0)
         grid.addWidget(self.build_dxvk_btn, 1, 1)
-        grid.addWidget(self.build_dxvk32_btn, 2, 0)
-        grid.addWidget(self.init_prefix_btn, 2, 1)
-        grid.addWidget(self.install_steam_btn, 3, 0, 1, 2)
+        grid.addWidget(self.init_prefix_btn, 2, 0)
+        grid.addWidget(self.install_steam_btn, 2, 1)
         layout.addWidget(steps_box)
         layout.addStretch()
 
@@ -418,6 +419,117 @@ class SettingsDialog(QDialog):
 
     def log(self, message: str) -> None:
         self.log_view.appendPlainText(message)
+
+
+class _AdminPasswordDialog(QDialog):
+    """Apple HIG-style admin password sheet."""
+
+    def __init__(self, message: str, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("MacNCheese Setup")
+        self.setFixedWidth(380)
+        self.setModal(True)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(14)
+
+        header = QHBoxLayout()
+        header.setSpacing(12)
+        icon_lbl = QLabel()
+        icon_lbl.setPixmap(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation).pixmap(40, 40)
+        )
+        icon_lbl.setFixedSize(40, 40)
+        header.addWidget(icon_lbl)
+        title_lbl = QLabel("<b>Administrator Password Required</b>")
+        title_lbl.setWordWrap(True)
+        header.addWidget(title_lbl, 1)
+        layout.addLayout(header)
+
+        msg_lbl = QLabel(message)
+        msg_lbl.setWordWrap(True)
+        msg_lbl.setStyleSheet("font-size: 12px;")
+        layout.addWidget(msg_lbl)
+
+        self._pwd_field = QLineEdit()
+        self._pwd_field.setEchoMode(QLineEdit.EchoMode.Password)
+        self._pwd_field.setPlaceholderText("Password")
+        self._pwd_field.returnPressed.connect(self.accept)
+        layout.addWidget(self._pwd_field)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        ok_btn = QPushButton("OK")
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(self.accept)
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(ok_btn)
+        layout.addLayout(btn_row)
+
+    def password(self) -> str:
+        return self._pwd_field.text()
+
+
+class _InstallProgressDialog(QDialog):
+    """Non-terminal install progress dialog with indeterminate progress bar."""
+    cancel_requested = pyqtSignal()
+
+    def __init__(self, title: str, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setFixedWidth(420)
+        self.setModal(True)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(14)
+
+        self._title_lbl = QLabel(f"<b>{title}</b>")
+        self._title_lbl.setStyleSheet("font-size: 14px;")
+        layout.addWidget(self._title_lbl)
+
+        self._step_lbl = QLabel("Starting…")
+        self._step_lbl.setWordWrap(True)
+        self._step_lbl.setStyleSheet("font-size: 12px;")
+        layout.addWidget(self._step_lbl)
+
+        self._bar = QProgressBar()
+        self._bar.setRange(0, 0)  # pulsing indeterminate
+        self._bar.setTextVisible(False)
+        self._bar.setFixedHeight(14)
+        self._bar.setStyleSheet(
+            "QProgressBar { border-radius: 7px; background: rgba(255,255,255,0.15); }"
+            "QProgressBar::chunk { border-radius: 7px; background: qlineargradient("
+            "  x1:0, y1:0, x2:1, y2:0, stop:0 #6C8EFF, stop:1 #A855F7); }"
+        )
+        layout.addWidget(self._bar)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        self._cancel_btn = QPushButton("Cancel")
+        self._cancel_btn.clicked.connect(self.cancel_requested)
+        btn_row.addWidget(self._cancel_btn)
+        layout.addLayout(btn_row)
+
+        self._done = False
+
+    def update_step(self, text: str) -> None:
+        if not self._done:
+            # show only last non-empty line as current step
+            last = next((l for l in reversed(text.splitlines()) if l.strip()), text.strip())
+            if last:
+                self._step_lbl.setText(last)
+
+    def mark_done(self, ok: bool, message: str) -> None:
+        self._done = True
+        self._bar.setRange(0, 1)
+        self._bar.setValue(1)
+        self._step_lbl.setText(message)
+        self._cancel_btn.setText("Close")
+        self._cancel_btn.clicked.disconnect()
+        self._cancel_btn.clicked.connect(self.accept)
 
 
 MODERN_THEME = """
@@ -1015,6 +1127,10 @@ class DxvkBackend(Backend):
 
     def apply_env(self, env: dict[str, str], game: GameModel, prefix: PrefixModel, window: "MainWindow") -> dict[str, str]:
         env = env.copy()
+        # Tell Wine where to find the DXVK native DLLs (supplement the per-game copy)
+        dxvk_bin = str(window.dxvk_bin_for_exe(game.exe_path) if game.exe_path else window.dxvk_install / "bin")
+        existing_dll_path = env.get("WINEDLLPATH", "")
+        env["WINEDLLPATH"] = f"{dxvk_bin}:{existing_dll_path}" if existing_dll_path else dxvk_bin
         env["WINEDLLOVERRIDES"] = "dxgi,d3d11,d3d10core=n,b"
         env["DXVK_LOG_PATH"] = str(Path.home() / "dxvk-logs")
         env["DXVK_LOG_LEVEL"] = "info"
@@ -1442,12 +1558,22 @@ class CommandWorker(QObject):
         self.commands = commands
         self.env = env or os.environ.copy()
         self.cwd = cwd
+        self._proc: Optional[subprocess.Popen] = None  # type: ignore[type-arg]
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+        if self._proc and self._proc.poll() is None:
+            self._proc.terminate()
 
     def run(self) -> None:
         try:
             for cmd in self.commands:
+                if self._cancelled:
+                    self.finished.emit(False, "Cancelled")
+                    return
                 self.output.emit(f"$ {' '.join(cmd)}")
-                proc = subprocess.Popen(
+                self._proc = subprocess.Popen(
                     cmd,
                     cwd=self.cwd,
                     env=self.env,
@@ -1456,10 +1582,13 @@ class CommandWorker(QObject):
                     text=True,
                     bufsize=1,
                 )
-                assert proc.stdout is not None
-                for line in proc.stdout:
+                assert self._proc.stdout is not None
+                for line in self._proc.stdout:
                     self.output.emit(line.rstrip())
-                rc = proc.wait()
+                rc = self._proc.wait()
+                if self._cancelled:
+                    self.finished.emit(False, "Cancelled")
+                    return
                 if rc != 0:
                     self.finished.emit(False, f"Command failed with exit code {rc}: {' '.join(cmd)}")
                     return
@@ -1952,6 +2081,7 @@ class MainWindow(QMainWindow):
         self.interactive_install_in_progress: bool = False
         self.interactive_install_action: Optional[str] = None
         self.pending_post_install_action: Optional[str] = None
+        self._progress_dlg: Optional[_InstallProgressDialog] = None
 
         self.prefix_combo = self.settings.prefix_combo
         self.dxvk_src_edit = self.settings.dxvk_src_edit
@@ -2209,6 +2339,7 @@ class MainWindow(QMainWindow):
         self.btn_top_launch_steam.clicked.connect(self.launch_steam)
         topbar_layout.addWidget(self.btn_top_launch_steam)
 
+
         self.search_bar = QLineEdit()
         self.search_bar.setObjectName("SearchBar")
         self.search_bar.setPlaceholderText("Search games...")
@@ -2358,8 +2489,15 @@ class MainWindow(QMainWindow):
 
         self.stacked_widget.addWidget(self.steam_view)           
 
+    def _update_steam_button(self) -> None:
+        steam_installed = (self.steam_dir / "steam.exe").exists()
+        label = "Launch" if steam_installed else "Install Steam"
+        if hasattr(self, "btn_install_steam"):
+            self.btn_install_steam.setText(label)
+
     def switch_view(self, view_name: str) -> None:
         if view_name == "steam":
+            self._update_steam_button()
             self.stacked_widget.setCurrentIndex(1)
         elif view_name == "games":
             self.stacked_widget.setCurrentIndex(0)
@@ -2398,10 +2536,10 @@ class MainWindow(QMainWindow):
             btn.setChecked(True)
 
             exe_path = dlg.exe_edit.text().strip()
-            if exe_path:
-                self.run_installer_action_in_terminal(f"wine '{exe_path}'")
-            else:
-                self.run_installer_action("wineboot")
+            wine = self.ensure_wine()
+            if wine:
+                cmd = [wine, exe_path] if exe_path else [wine, "wineboot"]
+                self.run_commands([cmd], env=self.wine_env(), progress_title="Initialising bottle…")
             
             self.set_status(f"Created bottle '{name}' at {p}")
             self.scan_games()
@@ -2576,8 +2714,8 @@ class MainWindow(QMainWindow):
         action_mesa = menu.addAction("Install Mesa")
         action_dxmt = menu.addAction("Install DXMT")
         action_vkd3d = menu.addAction("Install VKD3D-Proton")
-        action_dxvk64 = menu.addAction("Build DXVK (64bit)")
-        action_dxvk32 = menu.addAction("Build DXVK (32bit)")
+        action_dxvk64 = menu.addAction("Install DXVK")
+        action_dxvk32 = menu.addAction("Install DXVK")
         action_wine = menu.addAction("Install Wine")
         action_steam = menu.addAction("Install Steam")
 
@@ -2601,6 +2739,7 @@ class MainWindow(QMainWindow):
         action_dxvk32.triggered.connect(self.build_dxvk32)
         action_wine.triggered.connect(self.install_wine)
         action_steam.triggered.connect(self.install_steam)
+
         menu.exec(card_widget.mapToGlobal(pos))
 
 
@@ -2733,7 +2872,53 @@ class MainWindow(QMainWindow):
     def wine_env(self) -> dict[str, str]:
         env = os.environ.copy()
         env["WINEPREFIX"] = str(self.prefix_path)
+
+        # DXVK needs Vulkan. On macOS, Vulkan comes from MoltenVK bundled inside
+        # Wine Stable.app. The Vulkan loader (libvulkan.1.dylib from Homebrew) finds
+        # drivers via ICD manifest JSON files pointed to by VK_ICD_FILENAMES.
+        # Without a manifest, vkCreateInstance returns VK_ERROR_INCOMPATIBLE_DRIVER
+        # and DXVK silently falls back → game shows "DirectX 11 not available".
+        if not env.get("VK_ICD_FILENAMES"):
+            env["VK_ICD_FILENAMES"] = self._ensure_moltenvk_icd()
+
         return env
+
+    def _ensure_moltenvk_icd(self) -> str:
+        """Return a path to a MoltenVK ICD JSON manifest, creating one if needed."""
+        # 1. Pre-existing JSON manifests (SDK / Homebrew installs)
+        existing_json = [
+            Path("/usr/local/share/vulkan/icd.d/MoltenVK_icd.json"),
+            Path("/opt/homebrew/share/vulkan/icd.d/MoltenVK_icd.json"),
+            Path(Path.home() / ".local/share/vulkan/icd.d/MoltenVK_icd.json"),
+            Path("/Applications/Wine Stable.app/Contents/Resources/vulkan/icd.d/MoltenVK_icd.json"),
+            Path("/Applications/Wine Staging.app/Contents/Resources/vulkan/icd.d/MoltenVK_icd.json"),
+        ]
+        for p in existing_json:
+            if p.exists():
+                return str(p)
+
+        # 2. No pre-existing manifest — find libMoltenVK.dylib and generate one
+        moltenvk_lib_candidates = [
+            Path("/Applications/Wine Stable.app/Contents/Resources/wine/lib/libMoltenVK.dylib"),
+            Path("/Applications/Wine Staging.app/Contents/Resources/wine/lib/libMoltenVK.dylib"),
+            Path("/usr/local/lib/libMoltenVK.dylib"),
+            Path("/opt/homebrew/lib/libMoltenVK.dylib"),
+        ]
+        for lib in moltenvk_lib_candidates:
+            if lib.exists():
+                manifest_dir = Path.home() / ".config" / "macncheese" / "vulkan" / "icd.d"
+                manifest_dir.mkdir(parents=True, exist_ok=True)
+                manifest = manifest_dir / "MoltenVK_icd.json"
+                manifest.write_text(json.dumps({
+                    "file_format_version": "1.0.0",
+                    "ICD": {
+                        "library_path": str(lib),
+                        "api_version": "1.2.0",
+                    },
+                }, indent=2))
+                return str(manifest)
+
+        return ""  # nothing found — leave env var unset
 
     def append_log(self, message: str) -> None:
         self.log(message)
@@ -2756,8 +2941,9 @@ class MainWindow(QMainWindow):
         *,
         env: dict[str, str] | None = None,
         cwd: str | None = None,
+        progress_title: str = "Installing…",
     ) -> None:
-        
+
         if self.worker_thread is not None:
             try:
                 if self.worker_thread.isRunning():
@@ -2768,14 +2954,19 @@ class MainWindow(QMainWindow):
                 self.worker = None
 
         self.set_status("Task running")
+        self.interactive_install_in_progress = True
 
-       
+        # Show progress dialog
+        self._progress_dlg = _InstallProgressDialog(progress_title, self)
+        self._progress_dlg.cancel_requested.connect(self._cancel_worker)
+
         self.worker_thread = QThread(self)
         self.worker = CommandWorker(commands, env=env, cwd=cwd)
         self.worker.moveToThread(self.worker_thread)
 
         self.worker_thread.started.connect(self.worker.run)
         self.worker.output.connect(self.append_log)
+        self.worker.output.connect(self._progress_dlg.update_step)
         self.worker.error.connect(self.append_log)
         self.worker.finished.connect(self.on_worker_finished)
 
@@ -2790,9 +2981,21 @@ class MainWindow(QMainWindow):
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
 
         self.worker_thread.start()
+        self._progress_dlg.exec()
+
+    def _cancel_worker(self) -> None:
+        if self.worker:
+            self.worker.cancel()
 
     def on_worker_finished(self, ok: bool, message: str) -> None:
         self.set_status(message if ok else f"Failed: {message}")
+        self.interactive_install_in_progress = False
+        if self._progress_dlg is not None:
+            if ok:
+                self._progress_dlg.accept()
+            else:
+                self._progress_dlg.mark_done(False, message)
+            self._progress_dlg = None
 
         state = getattr(self, "_unified_state", 0)
         self._unified_state = 0
@@ -2802,6 +3005,8 @@ class MainWindow(QMainWindow):
             self.pending_post_install_action = None
         if not ok:
             lower = message.lower()
+            if lower == "cancelled":
+                return
             if "xcode command line tools" in lower or "clt install" in lower:
                 QMessageBox.warning(
                     self,
@@ -2986,17 +3191,18 @@ class MainWindow(QMainWindow):
         return False, "The macOS password was rejected or sudo is unavailable. Enter the same password you use to sign in to macOS, then try again."
 
     def request_admin_env(self) -> Optional[dict[str, str]]:
-        password, ok = QInputDialog.getText(
+        dlg = _AdminPasswordDialog(
+            "MacNCheese needs your administrator password to install software on your Mac.",
             self,
-            APP_NAME,
-            "Enter macOS Administrator password for setup:",
-            QLineEdit.EchoMode.Password,
         )
-        if ok and password:
-            env = os.environ.copy()
-            env["MNC_SUDO_PASSWORD"] = password
-            return env
-        return None
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None
+        password = dlg.password()
+        if not password:
+            return None
+        env = os.environ.copy()
+        env["MNC_SUDO_PASSWORD"] = password
+        return env
 
     def prepare_installer_env(self) -> Optional[dict[str, str]]:
         clt_ok, clt_msg = self.check_clt_installed()
@@ -3018,6 +3224,18 @@ class MainWindow(QMainWindow):
             return None
 
         return env
+
+    _ACTION_TITLES: dict[str, str] = {
+        "install_tools": "Installing Tools",
+        "install_wine": "Installing Wine",
+        "install_mesa": "Installing Mesa",
+        "install_dxvk": "Installing DXVK",
+        "install_dxmt": "Installing DXMT",
+        "install_vkd3d": "Installing VKD3D-Proton",
+        "quick_setup": "Setting Up MacNCheese",
+        "init_prefix": "Initialising Wine Prefix",
+        "install_steam": "Installing Steam",
+    }
 
     def run_installer_action(self, action: str) -> None:
         env = self.prepare_installer_env()
@@ -3049,7 +3267,8 @@ class MainWindow(QMainWindow):
             str(self.mesa_dir),
             DEFAULT_MESA_URL,
         ]
-        self.run_commands([args], env=env, cwd=str(script.parent))
+        title = self._ACTION_TITLES.get(action, f"Running: {action}")
+        self.run_commands([args], env=env, cwd=str(script.parent), progress_title=title)
 
 
     def _version_tuple(self, value: str) -> tuple[int, ...]:
@@ -3091,29 +3310,31 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, APP_NAME, f"Update check failed: {exc}")
 
     def install_tools(self) -> None:
-        self.run_installer_action_in_terminal("install_tools")
+        self.run_installer_action("install_tools")
 
     def install_wine(self) -> None:
-        self.run_installer_action_in_terminal("install_wine")
+        self.run_installer_action("install_wine")
 
     def install_mesa(self) -> None:
-        self.run_installer_action_in_terminal("install_mesa")
-    def install_dxmt(self) -> None:
-        self.run_installer_action_in_terminal("install_dxmt")
-    def install_vkd3d(self) -> None:
-        self.run_installer_action_in_terminal("install_vkd3d")
-    def quick_setup(self) -> None:
-        self.run_installer_action_in_terminal("quick_setup")
+        self.run_installer_action("install_mesa")
 
-    def _build_dxvk(self, *, arch: str) -> None:
-        action = "build_dxvk64" if arch == "win64" else "build_dxvk32"
-        self.run_installer_action_in_terminal(action)
+    def install_dxmt(self) -> None:
+        self.run_installer_action("install_dxmt")
+
+    def install_vkd3d(self) -> None:
+        self.run_installer_action("install_vkd3d")
+
+    def quick_setup(self) -> None:
+        self.run_installer_action("quick_setup")
+
+    def install_dxvk(self) -> None:
+        self.run_installer_action("install_dxvk")
 
     def build_dxvk(self) -> None:
-        self._build_dxvk(arch="win64")
+        self.install_dxvk()
 
     def build_dxvk32(self) -> None:
-        self._build_dxvk(arch="win32")
+        self.install_dxvk()
 
     def exe_is_32bit(self, exe: Path) -> bool:
         try:
@@ -3215,15 +3436,49 @@ class MainWindow(QMainWindow):
         wine = self.ensure_wine()
         if not wine:
             return
-        env = self.request_admin_env()
-        if env is None:
-            return
         if not self.steam_setup.exists():
             QMessageBox.warning(self, APP_NAME, f"SteamSetup.exe not found at {self.steam_setup}")
             return
-        run_env = env.copy()
-        run_env.update(self.wine_env())
-        self.run_commands([[wine, str(self.steam_setup)]], env=run_env)
+
+        # Tell the user where to install before the setup window appears
+        QMessageBox.information(
+            self,
+            "Install Steam",
+            "Steam Setup will open now.\n\n"
+            "When asked where to install, keep the default path (C:\\Program Files\\Steam).\n\n"
+            "MacNCheese will detect Steam automatically once setup is complete.",
+        )
+
+        self.activateWindow()
+        self.raise_()
+
+        env = self.wine_env()
+        qenv = QProcessEnvironment.systemEnvironment()
+        for key, value in env.items():
+            qenv.insert(key, value)
+
+        proc = QProcess(self)
+        proc.setProcessEnvironment(qenv)
+        proc.setProgram(wine)
+        proc.setArguments([str(self.steam_setup)])
+        proc.readyReadStandardOutput.connect(lambda: self._drain_process(proc))
+        proc.readyReadStandardError.connect(lambda: self._drain_process(proc))
+
+        def _on_steam_setup_done(exit_code: int, _exit_status) -> None:
+            self.log(f"SteamSetup.exe exited with code {exit_code}")
+            self.activateWindow()
+            self.raise_()
+            if (self.steam_dir / "steam.exe").exists():
+                self.set_status("Steam installed successfully")
+                self._update_steam_button()
+                QMessageBox.information(self, APP_NAME, "Steam has been installed! Click Launch to start it.")
+            else:
+                self.set_status("Steam installation may not have completed")
+
+        proc.finished.connect(_on_steam_setup_done)
+        proc.start()
+        self.set_status("Steam Setup running — complete the installer in the Steam window")
+
 
     def launch_steam(self) -> None:
         wine = self.ensure_wine()
@@ -3271,11 +3526,11 @@ class MainWindow(QMainWindow):
             missing = self.missing_core_tools()
 
             if self.interactive_install_in_progress:
-                self.set_status("Finish the installer in Terminal, then try Launch Steam again")
+                self.set_status("Setup already in progress, please wait…")
                 QMessageBox.information(
                     self,
                     APP_NAME,
-                    "MacNCheese already opened an interactive installer Terminal for the missing tools. Finish setup there, then click Launch Steam again.",
+                    "MacNCheese is already installing the required tools. Please wait for it to finish, then click Launch Steam again.",
                 )
                 return
 
@@ -3285,9 +3540,9 @@ class MainWindow(QMainWindow):
                 self.set_status("Xcode Command Line Tools required")
                 return
 
-            self.set_status(f"Missing prerequisites ({', '.join(missing)}). Opening installer Terminal...")
+            self.set_status(f"Missing prerequisites ({', '.join(missing)}). Starting setup…")
             self._unified_state = 1
-            self.run_installer_action_in_terminal("quick_setup", post_action="launch_steam")
+            self.run_installer_action("quick_setup")
             return
 
         elif not steam_installed:
@@ -3440,6 +3695,7 @@ class MainWindow(QMainWindow):
             self.log(line)
 
     def scan_games(self) -> None:
+        self._update_steam_button()
         games = SteamScanner.scan_games(self.prefix_path, self.steam_dir)
         self.games = games
         self.games_list.clear()
@@ -3557,7 +3813,7 @@ class MainWindow(QMainWindow):
         dxvk_bin = self.dxvk_bin_for_exe(exe) if exe is not None else (self.dxvk_install / "bin")
         for dll in DXVK_DLLS:
             if not (dxvk_bin / dll).exists():
-                QMessageBox.warning(self, APP_NAME, f"Missing {dll} in {dxvk_bin}. Build DXVK first.")
+                QMessageBox.warning(self, APP_NAME, f"Missing {dll} in {dxvk_bin}. Install DXVK first.")
                 return
 
         game.game_dir.mkdir(parents=True, exist_ok=True)
@@ -3592,6 +3848,7 @@ class MainWindow(QMainWindow):
             self.log(f"Copied {', '.join(DXVK_DLLS)} -> {tdir}")
 
         self.set_status(f"Patched {game.name} with local DXVK")
+
 
     def launch_selected_game(self, game: Optional["GameEntry"] = None, backend_id: Optional[str] = None, extra_args: str = "") -> None:
         game = game or self.selected_game()
@@ -3732,7 +3989,17 @@ class MainWindow(QMainWindow):
             self.set_status(f"{game.name} exited with code {code}")
 
             if effective_backend == LAUNCH_BACKEND_DXVK:
-                self.show_dxvk_log_for_selected_game()
+                log_path = self._latest_dxvk_log_for_game(game)
+                if log_path and log_path.exists():
+                    try:
+                        text = log_path.read_text(encoding="utf-8", errors="ignore")
+                        lines = text.splitlines()
+                        tail = "\n".join(lines[-200:]) if lines else "(log is empty)"
+                        self.log(f"--- DXVK log: {log_path.name} (last {min(200, len(lines))} lines) ---")
+                        for line in tail.splitlines():
+                            self.log(line)
+                    except Exception as exc:
+                        self.log(f"Failed to read DXVK log {log_path}: {exc}")
 
             wine_log_path = self.last_game_wine_log.get(game.appid)
             if wine_log_path and wine_log_path.exists():
@@ -3747,16 +4014,39 @@ class MainWindow(QMainWindow):
                     self.log(f"Failed to read wine log {wine_log_path}: {exc}")
 
             if self.is_unity_game(game):
-                self.show_unity_player_log_for_selected_game()
+                log_path = self.latest_unity_player_log_for_game(game)
+                if log_path and log_path.exists():
+                    try:
+                        text = log_path.read_text(encoding="utf-8", errors="ignore")
+                        lines = text.splitlines()
+                        tail = "\n".join(lines[-200:]) if lines else "(log is empty)"
+                        self.log(f"--- Unity Player.log: {log_path} (last {min(200, len(lines))} lines) ---")
+                        for line in tail.splitlines():
+                            self.log(line)
+                    except Exception as exc:
+                        self.log(f"Failed to read Unity log {log_path}: {exc}")
 
         self.game_process.finished.connect(_on_game_finished)
         self.game_process.start()
 
+
     def closeEvent(self, event) -> None:
+        # Kill tracked Qt processes first
         for proc in (self.game_process, self.steam_process):
             if proc and proc.state() != QProcess.ProcessState.NotRunning:
                 proc.kill()
                 proc.waitForFinished(2000)
+
+        # Shut down the entire Wine server for this prefix — terminates all
+        # remaining Wine processes (winedevice, services, explorer, etc.) cleanly.
+        try:
+            import subprocess
+            wineserver = self.wineserver_binary()
+            env = self.wine_env()
+            subprocess.run([wineserver, "-k"], env=env, timeout=5)
+        except Exception:
+            pass
+
         super().closeEvent(event)
 
 

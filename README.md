@@ -38,7 +38,7 @@ Once the app is open, click the **Install** button. It'll automatically download
 ### Step 4 — Install Steam
 Click the **Install Steam** button. The Steam installer will pop up — go through it like normal and log into your Steam account when it asks.
 
-> 🔝 **To open Steam later**, use the **Steam button at the top of the app**.
+>  **To open Steam later**, use the **Steam button at the top of the app**.
 
 ### Step 5 — Install & launch your game
 1. Open Steam (top of the app), find your game, and install it

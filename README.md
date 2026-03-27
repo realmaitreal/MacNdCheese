@@ -30,7 +30,7 @@ That's just macOS being overprotective. Here's how to fix it:
 2. Scroll down until you see a message about MacNCheese being blocked
 3. Click **"Open Anyway"**
 4. Enter your Mac password if asked
-5. Open the app again — it'll work now ✅
+5. Open the app again — it'll work now 
 
 ### Step 3 — Install everything with one click
 Once the app is open, click the **Install** button. It'll automatically download and set up Wine and all the other stuff it needs. Just wait for it to finish.
@@ -49,7 +49,7 @@ Click the **Install Steam** button. The Steam installer will pop up — go throu
 
 ---
 
-## ❓ FAQ
+##  FAQ
 
 ### 🤔 What even is this?
 MacNCheese is a free launcher that runs Windows games on macOS using Wine. It automatically sets up all the technical stuff (graphics translation layers, DLL overrides, etc.) so you don't have to.

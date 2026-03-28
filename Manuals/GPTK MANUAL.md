@@ -154,6 +154,7 @@ MacNCheese/
 ```
 
 ## Notes
+> [!NOTE]
 >GPTK backend needs the Windows DLLs, not only the .app bundle.
 >If a game still fails, remove any locally patched DXVK DLLs first.
 >MacNCheese uses WINEDLLOVERRIDES for:
@@ -162,9 +163,9 @@ MacNCheese/
 >d3d12
 
 A typical override setup looks like this:
-
+```
 export WINEDLLOVERRIDES="dxgi,d3d11,d3d12=n,b"
-
+```
 MacNCheese normally handles that for you automatically.
 
 

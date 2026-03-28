@@ -32,7 +32,7 @@ These are optional, but recommended if they are present:
 MacNCheese expects the DLLs to end up here:
 
 
-gptk/lib/wine/x86_64-windows/
+```bashgptk/lib/wine/x86_64-windows/```
 
 After the DLLs are imported, select this backend in the game launcher:
 
@@ -57,7 +57,7 @@ d3d12.dll
 
 In many cases, the folder will look like this:
 
-lib/wine/x86_64-windows/
+```bashlib/wine/x86_64-windows/```
 
 ##Step 3 - Import the DLLs into MacNCheese
 
@@ -88,14 +88,13 @@ If you want to prepare or inspect the files manually, these commands help.
 
 ##Create the target directory
 
-mkdir -p gptk/lib/wine/x86_64-windows
+```bashmkdir -p gptk/lib/wine/x86_64-windows```
 
 ##Check whether the required DLLs exist in your extracted folder
 
 Replace /path/to/extracted/gptk with your real path:
 
-ls -la /path/to/extracted/gptk
-find /path/to/extracted/gptk -iname "dxgi.dll" -o -iname "d3d11.dll" -o -iname "d3d12.dll"
+```bashls -la /path/to/extracted/gptk find /path/to/extracted/gptk -iname "dxgi.dll" -o -iname "d3d11.dll" -o -iname "d3d12.dll"```
 
 Example: copy the DLLs manually
 

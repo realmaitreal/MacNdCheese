@@ -1,117 +1,54 @@
 name: Build MacNCheese DMGs
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   build:
-    name: Build (arm64 + x86_64 via Rosetta)
-    runs-on: macos-latest  # Apple Silicon, free tier
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Apple Silicon
+            runner: macos-14
+            arch_name: silicon
+          - name: Intel
+            runner: macos-13
+            arch_name: intel
+
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Ensure Rosetta 2 is installed — softwareupdate is the official way.
-      # Exits 0 even if already installed, so this is always safe to run.
-      - name: Ensure Rosetta 2
-        run: sudo softwareupdate --install-rosetta --agree-to-license
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
 
       - name: Install create-dmg
         run: brew install create-dmg
 
-      # ── ARM64 BUILD ──────────────────────────────────────────────────────────
+      - name: Make build script executable
+        run: chmod +x scripts/build_dmg.sh
 
-      - name: (arm64) Install Python
-        run: |
-          # python.org universal2 installer gives us a native arm64 interpreter
-          curl -fsSL https://www.python.org/ftp/python/3.12.9/python-3.12.9-macos11.pkg \
-            -o /tmp/python-arm64.pkg
-          sudo installer -pkg /tmp/python-arm64.pkg -target /
-          /usr/local/bin/python3.12 --version
+      - name: Build app and DMG
+        run: ./scripts/build_dmg.sh "${{ matrix.arch_name }}"
 
-      - name: (arm64) Install deps + PyInstaller
-        run: |
-          /usr/local/bin/python3.12 -m pip install --upgrade pip
-          /usr/local/bin/python3.12 -m pip install pyinstaller
-          /usr/local/bin/python3.12 -m pip install -r requirements.txt
-
-      - name: (arm64) Build app bundle
-        run: |
-          /usr/local/bin/python3.12 -m PyInstaller MacNCheese.spec
-
-      - name: (arm64) Verify architecture
-        run: |
-          info=$(lipo -info "dist/MacNCheese.app/Contents/MacOS/MacNCheese")
-          echo "$info"
-          echo "$info" | grep -q "arm64" || (echo "Expected arm64 binary!" && exit 1)
-
-      - name: (arm64) Create DMG
-        run: |
-          create-dmg \
-            --volname "MacNCheese" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "MacNCheese.app" 175 190 \
-            --hide-extension "MacNCheese.app" \
-            --app-drop-link 425 190 \
-            "MacNCheese-silicon.dmg" \
-            "dist/"
-          rm -rf dist/ build/
-
-      # ── X86_64 BUILD (via Rosetta) ───────────────────────────────────────────
-
-      - name: (x86_64) Install Python
-        run: |
-          # Same universal2 .pkg — installer puts both slices down.
-          # We invoke the x86_64 slice explicitly via arch -x86_64.
-          arch -x86_64 /usr/local/bin/python3.12 --version
-
-      - name: (x86_64) Install deps + PyInstaller
-        run: |
-          arch -x86_64 /usr/local/bin/python3.12 -m pip install --upgrade pip
-          arch -x86_64 /usr/local/bin/python3.12 -m pip install pyinstaller
-          arch -x86_64 /usr/local/bin/python3.12 -m pip install -r requirements.txt
-
-      - name: (x86_64) Build app bundle
-        run: |
-          arch -x86_64 /usr/local/bin/python3.12 -m PyInstaller MacNCheese.spec
-
-      - name: (x86_64) Verify architecture
-        run: |
-          info=$(lipo -info "dist/MacNCheese.app/Contents/MacOS/MacNCheese")
-          echo "$info"
-          echo "$info" | grep -q "x86_64" || (echo "Expected x86_64 binary!" && exit 1)
-
-      - name: (x86_64) Create DMG
-        run: |
-          create-dmg \
-            --volname "MacNCheese" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "MacNCheese.app" 175 190 \
-            --hide-extension "MacNCheese.app" \
-            --app-drop-link 425 190 \
-            "MacNCheese-intel.dmg" \
-            "dist/"
-
-      # ── UPLOAD ───────────────────────────────────────────────────────────────
-
-      - name: Upload artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MacNCheese-dmgs
-          path: |
-            MacNCheese-silicon.dmg
-            MacNCheese-intel.dmg
+          name: MacNCheese-${{ matrix.arch_name }}-dmg
+          path: MacNCheese-${{ matrix.arch_name }}.dmg
           retention-days: 7
 
   release:
@@ -121,16 +58,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download artifacts
+      - name: Download silicon artifact
         uses: actions/download-artifact@v4
         with:
-          name: MacNCheese-dmgs
-          path: artifacts/
+          name: MacNCheese-silicon-dmg
+          path: artifacts/silicon
+
+      - name: Download intel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: MacNCheese-intel-dmg
+          path: artifacts/intel
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/MacNCheese-silicon.dmg
-            artifacts/MacNCheese-intel.dmg
+            artifacts/silicon/MacNCheese-silicon.dmg
+            artifacts/intel/MacNCheese-intel.dmg
           generate_release_notes: true

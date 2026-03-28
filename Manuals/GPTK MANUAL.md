@@ -40,7 +40,7 @@ After the DLLs are imported, select this backend in the game launcher:
 Backend -> GPTK (D3DMetal)
 
 
------------------------------
+---
 
 ###Quick Setup in MacNCheese
 
@@ -104,11 +104,11 @@ find /path/to/extracted/gptk -iname "dxgi.dll" -o -iname "d3d11.dll" -o -iname "
 Example: copy the DLLs manually
 > [!NOTE]
 >If your extracted DLL folder is already x86_64-windows, run:
-
+```bash
 cp /path/to/extracted/gptk/x86_64-windows/dxgi.dll gptk/lib/wine/x86_64-windows/
 cp /path/to/extracted/gptk/x86_64-windows/d3d11.dll gptk/lib/wine/x86_64-windows/
 cp /path/to/extracted/gptk/x86_64-windows/d3d12.dll gptk/lib/wine/x86_64-windows/
-
+```
 ## Copy optional DLLs too
 
 cp /path/to/extracted/gptk/x86_64-windows/d3d12core.dll gptk/lib/wine/x86_64-windows/ 2>/dev/null || true

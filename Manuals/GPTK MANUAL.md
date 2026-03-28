@@ -94,11 +94,13 @@ If you want to prepare or inspect the files manually, these commands help.
 
 Replace /path/to/extracted/gptk with your real path:
 
-```bashls -la /path/to/extracted/gptk find /path/to/extracted/gptk -iname "dxgi.dll" -o -iname "d3d11.dll" -o -iname "d3d12.dll"```
-
+```
+ls -la /path/to/extracted/gptk 
+find /path/to/extracted/gptk -iname "dxgi.dll" -o -iname "d3d11.dll" -o -iname "d3d12.dll"
+```
 Example: copy the DLLs manually
-
-##[WARNING!]If your extracted DLL folder is already x86_64-windows, run:
+> [!NOTE]
+>If your extracted DLL folder is already x86_64-windows, run:
 
 cp /path/to/extracted/gptk/x86_64-windows/dxgi.dll gptk/lib/wine/x86_64-windows/
 cp /path/to/extracted/gptk/x86_64-windows/d3d11.dll gptk/lib/wine/x86_64-windows/
@@ -111,21 +113,21 @@ cp /path/to/extracted/gptk/x86_64-windows/d3d10core.dll gptk/lib/wine/x86_64-win
 
 ##Verify the final target folder
 
-ls -la gptk/lib/wine/x86_64-windows/
+```ls -la gptk/lib/wine/x86_64-windows/```
 
 ##Find the DLL folder automatically
 
 If you do not know where the DLLs are after extracting GPTK:
 
-find /path/to/extracted/gptk -type f $begin:math:text$ \-iname \"dxgi\.dll\" \-o \-iname \"d3d11\.dll\" \-o \-iname \"d3d12\.dll\" $end:math:text$
+```find /path/to/extracted/gptk -type f $begin:math:text$ \-iname \"dxgi\.dll\" \-o \-iname \"d3d11\.dll\" \-o \-iname \"d3d12\.dll\" $end:math:text$```
 
 Copy the full DLL directory manually
 
 ##If you found the correct x86_64-windows folder:
-
+```
 mkdir -p gptk/lib/wine
 cp -R /path/to/extracted/gptk/x86_64-windows gptk/lib/wine/
-
+```
 
 
 
@@ -168,9 +170,9 @@ MacNCheese normally handles that for you automatically.
 GPTK backend says DLLs are missing
 
 Check the target folder:
-
+```
 ls -la gptk/lib/wine/x86_64-windows/
-
+```
 Make sure these files are there:
 
 dxgi.dll
@@ -180,15 +182,15 @@ d3d12.dll
 Game still launches with the wrong renderer
 
 Remove old local patches from the game directory first. For example:
-
+```
 find "/path/to/game" -iname "dxgi.dll" -o -iname "d3d11.dll" -o -iname "d3d10core.dll"
-
+```
 Then remove them if needed:
-
+```
 rm -f "/path/to/game/dxgi.dll"
 rm -f "/path/to/game/d3d11.dll"
 rm -f "/path/to/game/d3d10core.dll"
-
+```
 You want to inspect what MacNCheese is using
 
 Check the configured GPTK folder in the app and confirm the DLLs exist there. The expected target remains:

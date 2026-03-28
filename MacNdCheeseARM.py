@@ -311,6 +311,8 @@ class SettingsDialog(QDialog):
         self.install_gptk_full_btn.setStyleSheet("color: #FFCC00;") 
         self.install_d3dmetal3_btn = QPushButton("Install D3DMetal 3 (Prebuilt)")
         self.install_d3dmetal3_btn.setStyleSheet("color: #00D8D6; font-weight: bold;")
+        self.import_gptk_dlls_btn = QPushButton("Import GPTK DLLs")
+        self.import_gptk_dlls_btn.setStyleSheet("color: #7DD3FC; font-weight: bold;")
         hint = QLabel("Installs tools, Wine, builds DXVK (64/32), then installs Mesa.")
         hint.setWordWrap(True)
         quick_layout.addWidget(self.quick_setup_btn)
@@ -331,6 +333,12 @@ class SettingsDialog(QDialog):
         grid.addWidget(self.clean_prefix_btn, 13, 0, 1, 1)
         grid.addWidget(self.kill_wineserver_btn, 13, 1, 1, 1)
         grid.addWidget(self.unpatch_game_btn, 14, 0, 1, 2)
+        grid.addWidget(self.install_gptk_full_btn, 12, 0, 1, 1)
+        grid.addWidget(self.install_d3dmetal3_btn, 12, 1, 1, 1)
+        grid.addWidget(self.import_gptk_dlls_btn, 13, 0, 1, 2)
+        grid.addWidget(self.clean_prefix_btn, 14, 0, 1, 1)
+        grid.addWidget(self.kill_wineserver_btn, 14, 1, 1, 1)
+        grid.addWidget(self.unpatch_game_btn, 15, 0, 1, 2)
         layout.addWidget(steps_box)
         layout.addStretch()
 
@@ -349,6 +357,7 @@ class SettingsDialog(QDialog):
             self.install_steam_btn.clicked.connect(parent.install_steam)
             self.install_gptk_full_btn.clicked.connect(parent.install_gptk_full)
             self.install_d3dmetal3_btn.clicked.connect(parent.install_d3dmetal3)
+            self.import_gptk_dlls_btn.clicked.connect(parent.choose_and_import_gptk_dlls)
 
         return widget
 
@@ -893,7 +902,7 @@ QGroupBox::title {
 """
 
 APP_NAME = "MacNCheese"
-APP_VERSION = "v5.1.2"
+APP_VERSION = "v5.1.8"
 GITHUB_REPO = "mont127/MacNdCheese"
 GITHUB_LATEST_RELEASE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases"
@@ -910,6 +919,8 @@ DEFAULT_PATCHED_WINE_APP_RESOURCES_SUBDIR = "wine-build"
 STEAM_URL = "https://steamcdn-a.akamaihd.net/client/installer/SteamSetup.exe"
 DXVK_DLLS = ("d3d11.dll", "d3d10core.dll")
 DXVK_OPTIONAL_DLLS = ("dxgi.dll",)
+GPTK_REQUIRED_DLLS = ("dxgi.dll", "d3d11.dll", "d3d12.dll")
+GPTK_OPTIONAL_DLLS = ("d3d12core.dll", "d3d10core.dll")
 
 DEFAULT_MESA_URL = "https://github.com/pal1000/mesa-dist-win/releases/download/23.1.9/mesa3d-23.1.9-release-msvc.7z"
 
@@ -1305,7 +1316,11 @@ class GptkBackend(Backend):
         dll_dir = window.gptk_windows_dir
         required = ("dxgi.dll", "d3d11.dll", "d3d12.dll")
         if not dll_dir.exists() or not all((dll_dir / name).exists() for name in required):
-            raise RuntimeError("GPTK DLLs not found. Put GPTK Windows DLLs in gptk/lib/wine/x86_64-windows first.")
+            raise RuntimeError(
+                "GPTK DLLs not found.\n\n"
+                "Open Settings -> Setup -> Import GPTK DLLs,\n"
+                "then select the extracted folder containing dxgi.dll, d3d11.dll and d3d12.dll."
+                )
         window.unpatch_selected_game()
         return {"kind": "gptk"}
 
@@ -1555,8 +1570,9 @@ class GameEntry:
             except Exception:
                 continue
 
-        return None
-        
+       
+        if candidates:
+            return candidates[0]
 
         return None
 
@@ -2287,6 +2303,79 @@ class MainWindow(QMainWindow):
             self.update_checker = UpdateChecker(self)
             self.update_checker.update_available.connect(self.show_update_dialog)
             self.update_checker.start()
+
+    def find_gptk_dll_source_dir(self, root: Path) -> Optional[Path]:
+        if not root.exists():
+            return None
+
+        candidates = [
+            root,
+            root / "lib" / "wine" / "x86_64-windows",
+            root / "x86_64-windows",
+        ]
+
+        try:
+            candidates.extend(
+                p for p in root.glob("**/*")
+                if p.is_dir() and p.name.lower() == "x86_64-windows"
+            )
+        except Exception:
+            pass
+
+        for candidate in candidates:
+            try:
+                if candidate.is_dir() and all((candidate / dll).exists() for dll in GPTK_REQUIRED_DLLS):
+                    return candidate
+            except Exception:
+                continue
+        return None
+
+    def import_gptk_dlls_from_folder(self, source_root: Path) -> None:
+        src = self.find_gptk_dll_source_dir(source_root)
+        if src is None:
+            raise FileNotFoundError(
+                "Could not find GPTK Windows DLL folder.\n\n"
+                "Expected a folder containing: "
+                + ", ".join(GPTK_REQUIRED_DLLS)
+            )
+
+        dst = self.gptk_windows_dir
+        dst.mkdir(parents=True, exist_ok=True)
+
+        copied = []
+        for dll in GPTK_REQUIRED_DLLS + GPTK_OPTIONAL_DLLS:
+            s = src / dll
+            if s.exists():
+                shutil.copy2(s, dst / dll)
+                copied.append(dll)
+
+        missing = [dll for dll in GPTK_REQUIRED_DLLS if not (dst / dll).exists()]
+        if missing:
+            raise RuntimeError(f"Import incomplete. Missing required DLLs after copy: {', '.join(missing)}")
+
+        self.log(f"Imported GPTK DLLs from {src} -> {dst}: {', '.join(copied)}")
+        self.set_status("GPTK DLLs imported successfully")
+
+    def choose_and_import_gptk_dlls(self) -> None:
+        chosen = QFileDialog.getExistingDirectory(
+            self,
+            "Select extracted GPTK folder",
+            str(Path.home())
+        )
+        if not chosen:
+            return
+
+        try:
+            self.import_gptk_dlls_from_folder(Path(chosen))
+            QMessageBox.information(
+                self,
+                APP_NAME,
+                f"GPTK DLLs imported successfully.\n\nTarget:\n{self.gptk_windows_dir}"
+            )
+        except Exception as exc:
+            self.log(f"GPTK import failed: {exc}")
+            QMessageBox.warning(self, APP_NAME, str(exc))
+
 
     def show_update_dialog(self, latest_version: str):
         msg = QMessageBox(self)

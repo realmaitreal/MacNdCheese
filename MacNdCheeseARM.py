@@ -3484,39 +3484,7 @@ class MainWindow(QMainWindow):
             f"exec bash"
         )
 
-    def run_installer_action_in_terminal(self, action: str, *, post_action: Optional[str] = None) -> None:
-        script = self.installer_script_path()
-        if not script.exists():
-            QMessageBox.warning(self, APP_NAME, f"installer.sh not found at {script}")
-            return
 
-        if self.interactive_install_in_progress:
-            current_missing = self.missing_core_tools()
-            if current_missing:
-                QMessageBox.information(
-                    self,
-                    APP_NAME,
-                    "The installer is already running in a Terminal window. Please finish the installation there first.",
-                )
-                self.set_status("Installer terminal already open")
-                return
-            self.interactive_install_in_progress = False
-            self.interactive_install_action = None
-            self.pending_post_install_action = None
-
-        applescript = f'tell application "Terminal" to do script {json.dumps(self.installer_terminal_command(action))}'
-
-        try:
-            subprocess.run(["osascript", "-e", applescript], check=True)
-        except Exception as exc:
-            QMessageBox.warning(self, APP_NAME, f"Failed to open Terminal for installation: {exc}")
-            return
-
-        self.interactive_install_in_progress = True
-        self.interactive_install_action = action
-        self.pending_post_install_action = post_action
-        self.log(f"Opened Terminal for installer action: {action}")
-        self.set_status(f"Installer opened in Terminal for {action}")
 
     def _run_shell_check(self, command: str, *, env: dict[str, str] | None = None) -> tuple[int, str]:
         try:
@@ -3595,7 +3563,8 @@ class MainWindow(QMainWindow):
         "install_steam": "Installing Steam",
     }
 
-    def run_installer_action(self, action: str) -> None:
+    def run_installer_action(self, action: str, *, post_action: Optional[str] = None) -> None:
+        self.pending_post_install_action = post_action
         env = self.prepare_installer_env()
         if env is None:
             return
@@ -3671,7 +3640,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, APP_NAME, f"Update check failed: {exc}")
 
     def install_tools(self) -> None:
-        self.run_installer_action_in_terminal("install_tools")
+        self.run_installer_action("install_tools")
 
     def install_wine(self) -> None:
         patched = self.patched_wine_binary()
@@ -3680,26 +3649,26 @@ class MainWindow(QMainWindow):
             if hasattr(self, "status_label"):
                 self.status_label.setText("Bundled patched Wine build detected")
             return
-        self.run_installer_action_in_terminal("install_wine")
+        self.run_installer_action("install_wine")
 
     def install_mesa(self) -> None:
-        self.run_installer_action_in_terminal("install_mesa")
+        self.run_installer_action("install_mesa")
     def install_dxmt(self) -> None:
-        self.run_installer_action_in_terminal("install_dxmt")
+        self.run_installer_action("install_dxmt")
     def install_vkd3d(self) -> None:
-        self.run_installer_action_in_terminal("install_vkd3d")
+        self.run_installer_action("install_vkd3d")
     def quick_setup(self) -> None:
-        self.run_installer_action_in_terminal("quick_setup")
+        self.run_installer_action("quick_setup")
 
     def install_gptk_full(self) -> None:
-        self.run_installer_action_in_terminal("install_gptk_full")
+        self.run_installer_action("install_gptk_full")
 
     def install_d3dmetal3(self) -> None:
-        self.run_installer_action_in_terminal("install_d3dmetal3")
+        self.run_installer_action("install_d3dmetal3")
 
     def _build_dxvk(self, *, arch: str) -> None:
         action = "build_dxvk64" if arch == "win64" else "build_dxvk32"
-        self.run_installer_action_in_terminal(action)
+        self.run_installer_action(action)
 
     def build_dxvk(self) -> None:
         self._build_dxvk(arch="win64")
@@ -3813,7 +3782,7 @@ class MainWindow(QMainWindow):
         wine = self.ensure_wine()
         if not wine:
             return
-        self.run_installer_action_in_terminal("clean_prefix")
+        self.run_installer_action("clean_prefix")
 
     def kill_wineserver(self) -> None:
         try:
@@ -3824,7 +3793,7 @@ class MainWindow(QMainWindow):
             pass
 
         self.run_commands([["pkill", "-f", "wineserver"]])
-        self.run_installer_action_in_terminal("kill_wineserver")
+        self.run_installer_action("kill_wineserver")
 
     def install_steam(self) -> None:
         wine = self.ensure_wine()
@@ -3934,9 +3903,9 @@ class MainWindow(QMainWindow):
                 self.set_status("Xcode Command Line Tools required")
                 return
 
-            self.set_status(f"Missing prerequisites ({', '.join(missing)}). Opening installer Terminal...")
+            self.set_status(f"Missing prerequisites ({', '.join(missing)}). Continuing setup...")
             self._unified_state = 1
-            self.run_installer_action_in_terminal("quick_setup", post_action="launch_steam")
+            self.run_installer_action("quick_setup", post_action="launch_steam")
             return
 
         elif not steam_installed:

@@ -34,7 +34,7 @@ jobs:
 
       - name: Build Intel DMG
         run: |
-          arch -x86_64 ./scripts/build_dmg.sh intel
+          arch -x86_64 .github/workflows/release.yml intel
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

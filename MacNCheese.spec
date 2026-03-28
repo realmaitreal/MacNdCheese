@@ -4,7 +4,7 @@ import os
 from PyInstaller.utils.hooks import collect_submodules
 
 APP_NAME = "MacNCheese"
-MAIN_SCRIPT = "MacNCheese.py"
+MAIN_SCRIPT = "MacNCheeseARM.py"
 ICON_PATH = "assets/MacNCheese.icns"
 BUNDLE_ID = "com.marcel.macncheese"
 VERSION = os.environ.get("MACNCHEESE_VERSION", "0.1.0")

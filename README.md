@@ -3,9 +3,10 @@
 </p>
 
 # MacNCheese
-### Windows games on Mac, made free & eas
+### Windows games on Mac, made free & easy
  The proton mac never had -no subscriptions, no paywalls, just games.
 
+### THE PROTON MAC NEVER HAD
 MacNCheese is a simple app that lets you install and play Windows games on your Mac using Wine, with all the graphics stuff (DXVK, MoltenVK, Vulkan…) handled automatically so you don't have to touch the terminal.
 
 💬 **Need help?** Join the [Discord server](https://discord.gg/UPpVShYDaf)!

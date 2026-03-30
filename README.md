@@ -213,4 +213,5 @@ MacNCheese wouldn't exist without these incredible open source projects:
 
 Made with ❤️ for Mac gamers everywhere.
 
+>Use at your own risk 
 📬 Contact: deepwokenpersona@gmail.com

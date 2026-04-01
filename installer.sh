@@ -89,14 +89,10 @@ bootstrap_tools() {
 }
 
 install_wine() {
-    bootstrap_tools
-    archive="$WORK_DIR/wine.tar.xz"
-    unpack_dir="$MNC_RUNTIME_DIR/wine"
-    rm -rf "$unpack_dir"
-    mkdir -p "$unpack_dir"
-    echo "Installing portable Wine..."
-    download_file "$WINE_STABLE_URL" "$archive"
-    tar -xJf "$archive" -C "$unpack_dir" --strip-components=1
+    echo "Manual Wine installation is required."
+    echo "Please use the 'Install Wine' button in the MacNCheese Settings or the startup pop-up."
+    echo "Select a .tar.xz archive (like wine-11.3-portable.tar.xz) to proceed."
+    exit 1
 }
 
 install_dxvk() {

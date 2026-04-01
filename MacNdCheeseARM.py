@@ -1154,7 +1154,7 @@ QGroupBox::title {
 """
 
 APP_NAME = "MacNCheese"
-APP_VERSION = "v5.3.2"
+APP_VERSION = "v5.3.4"
 GITHUB_REPO = "mont127/MacNdCheese"
 GITHUB_LATEST_RELEASE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases"
@@ -2654,6 +2654,7 @@ class MainWindow(QMainWindow):
         self._build_menu()
         self.load_user_settings()
         self.startup_update_check()
+        self.check_7z_dependency()
         self.log(f"{APP_NAME} ready")
         self._sync_sidebar_prefix_buttons()
         QTimer.singleShot(500, self._ensure_default_prefix)
@@ -2757,7 +2758,88 @@ class MainWindow(QMainWindow):
         config[key] = existing
         self._save_bottles_config(config)
 
-    # ─────────────────────────────────────────────────────────────────────────
+   
+    def check_7z_dependency(self):
+        
+        bin_dir = DATA_ROOT / "bin"
+        
+        has_7z = shutil.which("7z") or shutil.which("7zz") or (bin_dir / "7z").exists() or (bin_dir / "7zz").exists()
+        
+        if not has_7z:
+            url = "https://www.7-zip.org/a/7z2408-mac.tar.xz"
+            webbrowser.open(url)
+            
+            box = QMessageBox(self)
+            box.setWindowTitle("7-Zip Installation")
+            box.setIcon(QMessageBox.Icon.Information)
+            box.setText("<b>7-Zip is required</b> to handle component extractions.")
+            box.setInformativeText(
+                "I've opened the 7-Zip download in your browser.\n\n"
+                "Once the download is complete, I will automatically detect it in your Downloads folder and finish the setup."
+            )
+            box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            box.exec()
+            
+            
+            if not hasattr(self, "_sevenzip_timer"):
+                self._sevenzip_timer = QTimer(self)
+                self._sevenzip_timer.timeout.connect(self._poll_for_7z_download)
+                self._sevenzip_timer.start(2000) 
+                self.log("Waiting for 7-Zip download in ~/Downloads...")
+
+    def _poll_for_7z_download(self):
+        downloads_dir = Path.home() / "Downloads"
+        if not downloads_dir.exists():
+            return
+            
+       
+        filenames = ["7z2408-mac.tar.xz"]
+        for i in range(1, 11):
+            filenames.append(f"7z2408-mac ({i}).tar.xz")
+            
+        for name in filenames:
+            p = downloads_dir / name
+            if p.exists() and p.stat().st_size > 10000: 
+                self.log(f"Detected 7-Zip download: {name}")
+                self._sevenzip_timer.stop()
+                self._complete_7z_install(p)
+                return
+
+    def _complete_7z_install(self, source_path):
+        try:
+            bin_dir = DATA_ROOT / "bin"
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            
+            self.log(f"Extracting 7zz from {source_path.name}...")
+           
+            subprocess.run(["tar", "-xJf", str(source_path), "-C", str(bin_dir), "7zz"], check=True)
+            
+            seven_z = bin_dir / "7zz"
+            if seven_z.exists():
+                os.chmod(seven_z, 0o755)
+               
+                subprocess.run(["xattr", "-d", "com.apple.quarantine", str(seven_z)], capture_output=True)
+                
+                
+                z_link = bin_dir / "7z"
+                if z_link.exists() or z_link.is_symlink():
+                    z_link.unlink()
+                try:
+                    os.symlink("7zz", z_link)
+                except Exception:
+                    
+                    shutil.copy2(seven_z, z_link)
+                
+                QMessageBox.information(self, "Success", "7-Zip has been installed and configured successfully.")
+                self.log("7-Zip installation complete.")
+            else:
+                raise RuntimeError("Failed to extract 7zz binary.")
+                
+        except Exception as e:
+            self.log(f"Error installing 7-Zip: {e}")
+            QMessageBox.critical(self, "Installation Error", f"Failed to complete 7-Zip setup:\n{e}")
+            
+            self._sevenzip_timer.start(2000)
 
     def startup_update_check(self):
         if not self.skip_update_check:

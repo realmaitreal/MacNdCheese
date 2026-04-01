@@ -1209,7 +1209,7 @@ class WineSetupDialog(QDialog):
 
 APP_NAME = "MacNCheese"
 
-APP_VERSION = "v5.4.1"
+APP_VERSION = "v5.4.2"
 GITHUB_REPO = "mont127/MacNdCheese"
 GITHUB_LATEST_RELEASE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases"
@@ -4833,14 +4833,6 @@ class MainWindow(QMainWindow):
     def install_tools(self) -> None:
         self.run_action_in_terminal("install_tools")
 
-    def install_wine(self) -> None:
-        patched = self.patched_wine_binary()
-        if patched:
-            self.log(f"Using bundled patched Wine build: {patched}")
-            if hasattr(self, "status_label"):
-                self.status_label.setText("Bundled patched Wine build detected")
-            return
-        self.run_installer_action("install_wine")
 
     def install_mesa(self) -> None:
         self.run_installer_action("install_mesa")

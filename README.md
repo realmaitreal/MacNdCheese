@@ -2,7 +2,7 @@
   <img src="icon.png" width="128" alt="MacNCheese icon" />
 </p>
 
-# MacNCheese
+# MacNCheese - STILL IN BETA TESTING
 ### Windows games on Mac, made free & easy
  The proton mac never had -no subscriptions, no paywalls, just games.
 

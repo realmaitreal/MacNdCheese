@@ -61,7 +61,7 @@ PORTABLE_BASE_URL="https://github.com/mont127/CheeseInstallation/releases/downlo
 PORTABLE_DEPS_URL="$PORTABLE_BASE_URL/macncheese_deps_arm64.zip"
 PORTABLE_WINE_URL="$PORTABLE_BASE_URL/wine_arm64.tar.xz"
 
-# (PORTABLE_DIR and PATH handled at top)
+
 WORK_DIR="$(mktemp -d /tmp/macncheese-installer.XXXXXX)"
 BREW_BIN=""
 trap 'stop_sudo_keepalive; rm -rf "$WORK_DIR"' EXIT
@@ -94,7 +94,9 @@ if [ -z "$VKD3D_URL" ]; then
 fi
 
 sudo_run() {
-  if [ -n "${MNC_SUDO_PASSWORD:-}" ]; then
+  if [ -n "${SUDO_ASKPASS:-}" ]; then
+    sudo -A "$@"
+  elif [ -n "${MNC_SUDO_PASSWORD:-}" ]; then
     printf '%s\n' "$MNC_SUDO_PASSWORD" | sudo -S "$@"
   else
     sudo "$@"
@@ -121,12 +123,16 @@ require_admin() {
 
 prime_sudo() {
   if [ "${MNC_SUDOLESS:-0}" = "1" ]; then
-    # In sudoless mode, we only prime sudo if we're forced to (e.g. for Rosetta)
-    # The app should have already warned the user.
+
     return 0
   fi
   require_admin
-  if [ -n "${MNC_SUDO_PASSWORD:-}" ]; then
+  if [ -n "${SUDO_ASKPASS:-}" ]; then
+    sudo -A -k -v >/dev/null 2>&1 || {
+      echo "The macOS password was rejected."
+      exit 1
+    }
+  elif [ -n "${MNC_SUDO_PASSWORD:-}" ]; then
     printf '%s\n' "$MNC_SUDO_PASSWORD" | sudo -S -k -v >/dev/null 2>&1 || {
       echo "The macOS password was rejected."
       exit 1
@@ -140,11 +146,15 @@ prime_sudo() {
 }
 
 start_sudo_keepalive() {
-  if [ -n "${MNC_SUDO_PASSWORD:-}" ]; then
+  if [ -n "${SUDO_ASKPASS:-}" ] || [ -n "${MNC_SUDO_PASSWORD:-}" ]; then
     (
       trap 'exit 0' TERM INT HUP
       while true; do
-        printf '%s\n' "$MNC_SUDO_PASSWORD" | "$REAL_SUDO" -S -n -v >/dev/null 2>&1 || true
+        if [ -n "${SUDO_ASKPASS:-}" ]; then
+          sudo -A -n -v >/dev/null 2>&1 || true
+        else
+          printf '%s\n' "$MNC_SUDO_PASSWORD" | sudo -S -n -v >/dev/null 2>&1 || true
+        fi
         sleep 20
       done
     ) >/dev/null 2>&1 &

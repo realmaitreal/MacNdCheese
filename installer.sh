@@ -1,7 +1,31 @@
 #!/bin/sh
 set -eu
 
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+# Define portable directory first
+PORTABLE_DIR="${HOME}/Library/Application Support/MacNCheese/deps"
+# Prioritize portable tools at the FRONT of PATH
+export PATH="$PORTABLE_DIR/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+
+# Tool absolute paths
+GIT_BIN="git"
+WGET_BIN="wget"
+SEVENZ_BIN="7z"
+
+# Smarts for GIT_BIN: portable git in some distros is missing HTTPS helpers
+if [ -x "$PORTABLE_DIR/bin/git" ]; then
+  # Verify if portable git can handle HTTPS
+  if "$PORTABLE_DIR/bin/git" remote-https --help >/dev/null 2>&1 || [ -f "$PORTABLE_DIR/libexec/git-core/git-remote-https" ]; then
+    GIT_BIN="$PORTABLE_DIR/bin/git"
+  else
+    # If portable git is broken, prefer system git or brew git
+    if command -v git >/dev/null 2>&1; then
+      GIT_BIN="$(command -v git)"
+    fi
+  fi
+fi
+
+if [ -x "$PORTABLE_DIR/bin/wget" ]; then WGET_BIN="$PORTABLE_DIR/bin/wget"; fi
+if [ -x "$PORTABLE_DIR/bin/7zz" ]; then SEVENZ_BIN="$PORTABLE_DIR/bin/7zz"; fi
 
 ACTION="${1:-}"
 PREFIX_DIR="${2:-}"
@@ -26,8 +50,7 @@ PORTABLE_BASE_URL="https://github.com/mont127/CheeseInstallation/releases/downlo
 PORTABLE_DEPS_URL="$PORTABLE_BASE_URL/macncheese_deps_arm64.zip"
 PORTABLE_WINE_URL="$PORTABLE_BASE_URL/wine_arm64.tar.xz"
 
-PORTABLE_DIR="${HOME}/Library/Application Support/MacNCheese/deps"
-export PATH="$PORTABLE_DIR/bin:$PATH"
+# (PORTABLE_DIR and PATH handled at top)
 WORK_DIR="$(mktemp -d /tmp/macncheese-installer.XXXXXX)"
 BREW_BIN=""
 trap 'stop_sudo_keepalive; rm -rf "$WORK_DIR"' EXIT
@@ -47,7 +70,7 @@ elif command -v brew >/dev/null 2>&1; then
   BREW_BIN="$(command -v brew)"
 fi
 
-if [ -n "$BREW_BIN" ]; then
+if [ -n "$BREW_BIN" ] && [ "${MNC_SUDOLESS:-0}" != "1" ]; then
   eval "$($BREW_BIN shellenv 2>/dev/null || true)"
 fi
 
@@ -76,6 +99,9 @@ is_admin_user() {
 }
 
 require_admin() {
+  if [ "${MNC_SUDOLESS:-0}" = "1" ]; then
+    return 0
+  fi
   if ! is_admin_user; then
     echo "This macOS user is not an Administrator. MacNCheese setup needs an admin account on a new Mac."
     exit 1
@@ -83,6 +109,11 @@ require_admin() {
 }
 
 prime_sudo() {
+  if [ "${MNC_SUDOLESS:-0}" = "1" ]; then
+    # In sudoless mode, we only prime sudo if we're forced to (e.g. for Rosetta)
+    # The app should have already warned the user.
+    return 0
+  fi
   require_admin
   if [ -n "${MNC_SUDO_PASSWORD:-}" ]; then
     printf '%s\n' "$MNC_SUDO_PASSWORD" | sudo -S -k -v >/dev/null 2>&1 || {
@@ -118,6 +149,11 @@ stop_sudo_keepalive() {
 }
 
 ensure_clt() {
+  if [ "${MNC_SUDOLESS:-0}" = "1" ]; then
+    if xcode-select -p >/dev/null 2>&1; then return; fi
+    echo "Xcode Command Line Tools missing. Portable tools might still work if they are standalone."
+    return
+  fi
   prime_sudo
   if xcode-select -p >/dev/null 2>&1; then
     return
@@ -142,6 +178,9 @@ ensure_clt() {
 }
 
 ensure_brew() {
+  if [ "${MNC_SUDOLESS:-0}" = "1" ]; then
+    return 0
+  fi
   ensure_clt
   if [ -z "$BREW_BIN" ]; then
     prime_sudo
@@ -158,7 +197,9 @@ ensure_brew() {
     eval "$($BREW_BIN shellenv 2>/dev/null || true)"
   fi
   echo "Using brew: $BREW_BIN"
-  "$BREW_BIN" update || true
+  if [ "${MNC_SUDOLESS:-0}" != "1" ]; then
+    "$BREW_BIN" update || true
+  fi
 }
 
 download_file() {
@@ -217,15 +258,27 @@ install_portable_tools() {
   mkdir -p "$PORTABLE_DIR"
   archive="$WORK_DIR/deps.zip"
   download_file "$PORTABLE_DEPS_URL" "$archive"
-  unzip -q "$archive" -d "$PORTABLE_DIR" || {
+  unzip -o -q "$archive" -d "$PORTABLE_DIR" || {
     echo "Failed to unzip portable tools"
     exit 1
   }
   
-  if [ -d "$PORTABLE_DIR/macncheese_deps" ]; then
-    cp -R "$PORTABLE_DIR/macncheese_deps/"* "$PORTABLE_DIR/"
-    rm -rf "$PORTABLE_DIR/macncheese_deps"
-  fi
+  # Ensure target is writable before copying
+  chmod -R u+w "$PORTABLE_DIR" 2>/dev/null || true
+
+  # Handle both possible directory names from the zip
+  for item in macncheese_deps macncheese_deps_arm64; do
+    if [ -d "$PORTABLE_DIR/$item" ]; then
+      # Use force flag to overwrite existing files
+      cp -Rf "$PORTABLE_DIR/$item/"* "$PORTABLE_DIR/"
+      rm -rf "$PORTABLE_DIR/$item"
+    fi
+  done
+  
+  # Ad-hoc sign binaries to prevent SIGKILL on ARM64 (recursive for helpers in libexec etc)
+  echo "Applying security signatures to portable tools..."
+  find "$PORTABLE_DIR" -type f -perm +111 -exec /usr/bin/codesign --force --sign - --timestamp=none {} \; 2>/dev/null || true
+  
   echo "Portable tools installed to $PORTABLE_DIR"
 }
 install_vkd3d() {
@@ -243,11 +296,19 @@ install_vkd3d() {
   echo "Downloading VKD3D-Proton from $VKD3D_URL"
   download_file "$VKD3D_URL" "$archive"
 
-  if command -v unzstd >/dev/null 2>&1; then
+  local zstd_bin="zstd"
+  if [ -x "$PORTABLE_DIR/bin/zstd" ]; then
+    zstd_bin="$PORTABLE_DIR/bin/zstd"
+  fi
+
+  if [ -x "$PORTABLE_DIR/bin/unzstd" ]; then
+    "$PORTABLE_DIR/bin/unzstd" -f "$archive"
+    archive_tar="${archive%.zst}"
+  elif command -v unzstd >/dev/null 2>&1; then
     unzstd -f "$archive"
     archive_tar="${archive%.zst}"
-  elif command -v zstd >/dev/null 2>&1; then
-    zstd -d -f "$archive" -o "${archive%.zst}"
+  elif command -v "$zstd_bin" >/dev/null 2>&1; then
+    "$zstd_bin" -d -f "$archive" -o "${archive%.zst}"
     archive_tar="${archive%.zst}"
   elif command -v python3 >/dev/null 2>&1; then
     python3 - <<'PY' "$archive" "${archive%.zst}"
@@ -335,7 +396,7 @@ clone_dxvk_if_missing() {
   if [ ! -d "$DXVK_SRC" ]; then
     echo "Cloning DXVK-macOS into $DXVK_SRC"
     mkdir -p "$(dirname "$DXVK_SRC")"
-    git clone https://github.com/Gcenx/DXVK-macOS.git "$DXVK_SRC"
+    "$GIT_BIN" clone https://github.com/Gcenx/DXVK-macOS.git "$DXVK_SRC"
   fi
   if [ ! -f "$DXVK_SRC/build-win64.txt" ] || [ ! -f "$DXVK_SRC/build-win32.txt" ]; then
     echo "DXVK cross files not found in $DXVK_SRC"
@@ -422,12 +483,22 @@ build_dxvk32() {
 
 install_mesa() {
   ensure_brew
-  "$BREW_BIN" install p7zip || true
+  
+  # Prefer portable 7zz if available
+  local sevenz="7z"
+  if [ -x "$PORTABLE_DIR/bin/7zz" ]; then
+    sevenz="$PORTABLE_DIR/bin/7zz"
+  elif command -v 7zz >/dev/null 2>&1; then
+    sevenz="7zz"
+  elif command -v 7z >/dev/null 2>&1; then
+    sevenz="7z"
+  fi
+
   cd "$HOME"
   rm -rf mesa mesa.7z
   curl -L -o mesa.7z "$MESA_URL"
   mkdir -p mesa
-  7z x mesa.7z -omesa >/dev/null
+  "$sevenz" x -y mesa.7z -omesa >/dev/null
   if [ ! -d "$HOME/mesa/x64" ] && ls -1 "$HOME/mesa" | grep -q mesa3d-; then
     sub=$(ls -1 "$HOME/mesa" | grep mesa3d- | head -n1)
     if [ -d "$HOME/mesa/$sub/x64" ]; then
@@ -495,7 +566,9 @@ init_prefix() {
   fi
   mkdir -p "$PREFIX_DIR"
   export WINEPREFIX="$PREFIX_DIR"
-  if command -v wine >/dev/null 2>&1; then
+  if [ -x "$PORTABLE_DIR/bin/wine" ]; then
+    "$PORTABLE_DIR/bin/wine" wineboot
+  elif command -v wine >/dev/null 2>&1; then
     wine wineboot
   elif [ -x /opt/homebrew/bin/wine ]; then
     /opt/homebrew/bin/wine wineboot
@@ -512,13 +585,13 @@ init_prefix() {
 }
 
 quick_setup() {
-  install_tools
-  install_wine
+  install_portable_tools
+  install_portable_wine
   install_dxvk
   install_mesa
 }
 
-if [ "${MNC_SUDOLESS:-0}" != "1" ]; then
+if [ "${MNC_SUDOLESS:-0}" != "1" ] && [ "$ACTION" != "init_prefix" ] && [ "$ACTION" != "quick_setup" ]; then
   prime_sudo
   start_sudo_keepalive
 fi
@@ -543,7 +616,7 @@ case "$ACTION" in
   install_mesa)
     install_mesa
     ;;
-  install_dxmt)
+  install_dxmt|install_d3dmetal|install_d3dmetal3)
     install_dxmt
     ;;
   install_vkd3d)

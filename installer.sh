@@ -1,23 +1,23 @@
 #!/bin/sh
 set -eu
 
-# Define portable directory first
+
 PORTABLE_DIR="${HOME}/Library/Application Support/MacNCheese/deps"
-# Prioritize portable tools at the FRONT of PATH
+
 export PATH="$PORTABLE_DIR/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 
-# Tool absolute paths
+
 GIT_BIN="git"
 WGET_BIN="wget"
 SEVENZ_BIN="7z"
 
-# Smarts for GIT_BIN: portable git in some distros is missing HTTPS helpers
+
 if [ -x "$PORTABLE_DIR/bin/git" ]; then
-  # Verify if portable git can handle HTTPS
+ 
   if "$PORTABLE_DIR/bin/git" remote-https --help >/dev/null 2>&1 || [ -f "$PORTABLE_DIR/libexec/git-core/git-remote-https" ]; then
     GIT_BIN="$PORTABLE_DIR/bin/git"
   else
-    # If portable git is broken, prefer system git or brew git
+
     if command -v git >/dev/null 2>&1; then
       GIT_BIN="$(command -v git)"
     fi
@@ -50,7 +50,7 @@ PORTABLE_BASE_URL="https://github.com/mont127/CheeseInstallation/releases/downlo
 PORTABLE_DEPS_URL="$PORTABLE_BASE_URL/macncheese_deps_arm64.zip"
 PORTABLE_WINE_URL="$PORTABLE_BASE_URL/wine_arm64.tar.xz"
 
-# (PORTABLE_DIR and PATH handled at top)
+
 WORK_DIR="$(mktemp -d /tmp/macncheese-installer.XXXXXX)"
 BREW_BIN=""
 trap 'stop_sudo_keepalive; rm -rf "$WORK_DIR"' EXIT
@@ -110,8 +110,7 @@ require_admin() {
 
 prime_sudo() {
   if [ "${MNC_SUDOLESS:-0}" = "1" ]; then
-    # In sudoless mode, we only prime sudo if we're forced to (e.g. for Rosetta)
-    # The app should have already warned the user.
+
     return 0
   fi
   require_admin
@@ -263,10 +262,10 @@ install_portable_tools() {
     exit 1
   }
   
-  # Ensure target is writable before copying
+
   chmod -R u+w "$PORTABLE_DIR" 2>/dev/null || true
 
-  # Handle both possible directory names from the zip
+
   for item in macncheese_deps macncheese_deps_arm64; do
     if [ -d "$PORTABLE_DIR/$item" ]; then
       # Use force flag to overwrite existing files
@@ -275,7 +274,7 @@ install_portable_tools() {
     fi
   done
   
-  # Ad-hoc sign binaries to prevent SIGKILL on ARM64 (recursive for helpers in libexec etc)
+
   echo "Applying security signatures to portable tools..."
   find "$PORTABLE_DIR" -type f -perm +111 -exec /usr/bin/codesign --force --sign - --timestamp=none {} \; 2>/dev/null || true
   
@@ -484,7 +483,7 @@ build_dxvk32() {
 install_mesa() {
   ensure_brew
   
-  # Prefer portable 7zz if available
+
   local sevenz="7z"
   if [ -x "$PORTABLE_DIR/bin/7zz" ]; then
     sevenz="$PORTABLE_DIR/bin/7zz"

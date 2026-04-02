@@ -4690,6 +4690,8 @@ class MainWindow(QMainWindow):
                 env = self.prepare_installer_env()
             else:
                 env = os.environ.copy()
+            
+            if env:
                 env["MNC_SUDOLESS"] = "1"
         else:
             env = self.prepare_installer_env()

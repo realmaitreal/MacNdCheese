@@ -467,6 +467,19 @@ init_prefix() {
   fi
 }
 
+install_powershell() {
+  if [ -z "$PREFIX_DIR" ]; then
+    echo "PREFIX_DIR not set, cannot install PowerShell"
+    exit 1
+  fi
+  if ! command -v winetricks >/dev/null 2>&1; then
+    echo "winetricks not found, installing tools first..."
+    install_tools
+  fi
+  echo "Installing PowerShell into prefix: $PREFIX_DIR"
+  WINEPREFIX="$PREFIX_DIR" winetricks -q powershell
+}
+
 quick_setup() {
   install_tools
   install_wine
@@ -509,6 +522,9 @@ case "$ACTION" in
     ;;
   quick_setup)
     quick_setup
+    ;;
+  install_powershell)
+    install_powershell
     ;;
   *)
     echo "Unknown action: $ACTION"

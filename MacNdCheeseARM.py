@@ -218,9 +218,12 @@ class SettingsDialog(QDialog):
         self.btn_kill_wineserver_bottle = QPushButton("Kill Wineserver")
         self.btn_kill_wineserver_bottle.setStyleSheet("color: #FF5555;")
         self.btn_unpatch_bottle = QPushButton("Unpatch Game (remove DLLs)")
+        self.btn_winecfg_bottle = QPushButton("Open CMD")
+        self.btn_winecfg_bottle.setToolTip("Open a Windows command prompt (cmd) for this bottle's Wine prefix")
         tools_layout.addWidget(self.btn_clean_prefix_bottle, 0, 0)
         tools_layout.addWidget(self.btn_kill_wineserver_bottle, 0, 1)
         tools_layout.addWidget(self.btn_unpatch_bottle, 1, 0, 1, 2)
+        tools_layout.addWidget(self.btn_winecfg_bottle, 2, 0, 1, 2)
 
         parent = self.parent()
         if parent:
@@ -234,6 +237,7 @@ class SettingsDialog(QDialog):
                 self.btn_kill_wineserver_bottle.clicked.connect(parent.kill_wineserver)
             if hasattr(parent, "unpatch_selected_game"):
                 self.btn_unpatch_bottle.clicked.connect(parent.unpatch_selected_game)
+            self.btn_winecfg_bottle.clicked.connect(self._launch_winecfg_for_bottle)
 
         form.addRow("Prefix path", self.bottle_prefix_display)
         form.addRow("Bottle Name", self.bottle_name_edit)
@@ -372,6 +376,45 @@ class SettingsDialog(QDialog):
 
         return wrap
 
+    def _launch_winecfg_for_bottle(self) -> None:
+        raw = self.bottle_prefix_display.text().strip()
+        if not raw:
+            QMessageBox.warning(self, "Open CMD", "No bottle selected.")
+            return
+        prefix_path = str(Path(raw).expanduser().resolve())
+        parent = self.parent()
+        if not parent or not hasattr(parent, "wine_binary"):
+            QMessageBox.warning(self, "Open CMD", "Cannot locate Wine binary.")
+            return
+        try:
+            wine = parent.wine_binary()
+        except FileNotFoundError as e:
+            QMessageBox.warning(self, "Open CMD", str(e))
+            return
+        iterm2_path = Path("/Applications/iTerm.app")
+        if iterm2_path.exists():
+            script = (
+                f'tell application "iTerm2"\n'
+                f'    set winePrefix to "{prefix_path}"\n'
+                f'    set wineBin to "{wine}"\n'
+                f'    set shellCmd to "WINEPREFIX=" & winePrefix & " WINEDEBUG=-all " & wineBin & " cmd.exe"\n'
+                f'    set newWindow to (create window with default profile command ("/bin/bash -c " & quoted form of shellCmd))\n'
+                f'    activate\n'
+                f'end tell'
+            )
+        else:
+            cmd_str = f"WINEPREFIX={shlex.quote(prefix_path)} WINEDEBUG=-all {shlex.quote(wine)} cmd.exe"
+            as_cmd = cmd_str.replace('\\', '\\\\').replace('"', '\\"')
+            script = (
+                f'tell application "Terminal"\n'
+                f'    do script "{as_cmd}"\n'
+                f'    activate\n'
+                f'end tell'
+            )
+        result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        if result.returncode != 0:
+            QMessageBox.warning(self, "Open CMD", f"Failed to open terminal:\n{result.stderr.strip()}")
+
     def _remove_prefix(self) -> None:
         path_str = self.prefix_combo.currentText()
         idx = self.prefix_combo.currentIndex()
@@ -442,6 +485,7 @@ class SettingsDialog(QDialog):
         self.cb_install_gptk_full = QCheckBox("Install GPTK FULL (Experimental)")
         self.cb_install_d3dmetal3 = QCheckBox("Install D3DMetal 3 (Prebuilt)")
         self.cb_import_gptk_dlls = QCheckBox("Import GPTK DLLs")
+        self.cb_install_powershell = QCheckBox("Install PowerShell (via winetricks, current bottle)")
 
         _indicator = (
             "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px;"
@@ -450,14 +494,15 @@ class SettingsDialog(QDialog):
             "QCheckBox::indicator:unchecked:hover { border: 1px solid rgba(255,255,255,0.7); }"
         )
         for cb, color, bold in (
-            (self.cb_install_tools,     None,      False),
-            (self.cb_install_wine,      None,      False),
-            (self.cb_install_mesa,      None,      False),
-            (self.cb_build_dxvk,        None,      False),
-            (self.cb_build_dxvk32,      None,      False),
-            (self.cb_install_gptk_full, "#FFCC00", True),
-            (self.cb_install_d3dmetal3, "#00D8D6", True),
-            (self.cb_import_gptk_dlls,  "#7DD3FC", True),
+            (self.cb_install_tools,        None,      False),
+            (self.cb_install_wine,         None,      False),
+            (self.cb_install_mesa,         None,      False),
+            (self.cb_build_dxvk,           None,      False),
+            (self.cb_build_dxvk32,         None,      False),
+            (self.cb_install_gptk_full,    "#FFCC00", True),
+            (self.cb_install_d3dmetal3,    "#00D8D6", True),
+            (self.cb_import_gptk_dlls,     "#7DD3FC", True),
+            (self.cb_install_powershell,   None,      False),
         ):
             color_css = f" color: {color};" if color else ""
             weight_css = " font-weight: bold;" if bold else ""
@@ -473,14 +518,15 @@ class SettingsDialog(QDialog):
 
         # (install_action, uninstall_action_or_None)
         self._component_actions = [
-            (self.cb_install_tools,     "install_tools",               None),
-            (self.cb_install_wine,      "install_wine",                None),
-            (self.cb_install_mesa,      "install_mesa",                None),
-            (self.cb_build_dxvk,        "build_dxvk",                  None),
-            (self.cb_build_dxvk32,      "build_dxvk32",                None),
-            (self.cb_install_gptk_full, "install_gptk_full",           None),
-            (self.cb_install_d3dmetal3, "install_d3dmetal3",           None),
-            (self.cb_import_gptk_dlls,  "choose_and_import_gptk_dlls", None),
+            (self.cb_install_tools,       "install_tools",               None),
+            (self.cb_install_wine,        "install_wine",                None),
+            (self.cb_install_mesa,        "install_mesa",                None),
+            (self.cb_build_dxvk,          "build_dxvk",                  None),
+            (self.cb_build_dxvk32,        "build_dxvk32",                None),
+            (self.cb_install_gptk_full,   "install_gptk_full",           None),
+            (self.cb_install_d3dmetal3,   "install_d3dmetal3",           None),
+            (self.cb_import_gptk_dlls,    "choose_and_import_gptk_dlls", None),
+            (self.cb_install_powershell,  "install_powershell",          None),
         ]
 
         parent = self.parent()
@@ -550,10 +596,19 @@ class SettingsDialog(QDialog):
             dll_dir = p / "lib" / "wine" / "x86_64-windows"
             return all((dll_dir / dll).exists() for dll in GPTK_REQUIRED_DLLS)
 
+        def _is_powershell():
+            try:
+                prefix = Path(self.prefix_combo.currentText()).expanduser().resolve()
+                return (prefix / "drive_c" / "windows" / "system32" / "WindowsPowerShell"
+                        / "v1.0" / "powershell.exe").exists()
+            except Exception:
+                return False
+
         states = [
             _is_tools(), _is_wine(), _is_mesa(),
             _is_dxvk(), _is_dxvk32(),
             _is_gptk_full(), _is_d3dmetal3(), _is_gptk_dlls(),
+            _is_powershell(),
         ]
         for (cb, _, _), checked in zip(self._component_actions, states):
             cb.setChecked(checked)
@@ -4683,6 +4738,9 @@ class MainWindow(QMainWindow):
 
     def install_d3dmetal3(self) -> None:
         self.run_installer_action("install_d3dmetal3")
+
+    def install_powershell(self) -> None:
+        self.run_installer_action("install_powershell")
 
     def _build_dxvk(self, *, arch: str) -> None:
         action = "build_dxvk64" if arch == "win64" else "build_dxvk32"

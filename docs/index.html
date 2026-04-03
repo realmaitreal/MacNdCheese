@@ -1,112 +1,844 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>MacNCheese</title>
-<style>
-body{
-margin:0;
-font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial;
-background:#0d0d0d;
-color:white;
-display:flex;
-align-items:center;
-justify-content:center;
-min-height:100vh;
-text-align:center
-}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MacNCheese — Run Windows Games on macOS for Free</title>
 
-.container{
-max-width:800px;
-padding:40px
-}
+  <!-- SEO -->
+  <meta name="description" content="MacNCheese is a free, open-source launcher that runs Windows Steam games on Apple Silicon Macs using Wine, DXVK, and MoltenVK. No subscriptions, no terminal, no paywalls.">
+  <meta name="keywords" content="MacNCheese, run Windows games on Mac, Wine macOS, Steam on Mac, Apple Silicon gaming, DXVK Mac, MoltenVK, free game launcher Mac, M1 M2 M3 M4 gaming">
+  <meta name="author" content="MacNCheese contributors">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mont127.github.io/MacNdCheese/">
 
-.logo{
-width:120px;
-border-radius:20px;
-margin-bottom:20px
-}
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mont127.github.io/MacNdCheese/">
+  <meta property="og:title" content="MacNCheese — Run Windows Games on macOS for Free">
+  <meta property="og:description" content="Free, open-source launcher to play Windows Steam games on Apple Silicon Macs using Wine, DXVK, and MoltenVK. No subscriptions. No terminal required.">
+  <meta property="og:image" content="https://mont127.github.io/MacNdCheese/icon.png">
+  <meta property="og:site_name" content="MacNCheese">
 
-h1{
-font-size:56px;
-margin:10px 0
-}
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MacNCheese — Run Windows Games on macOS">
+  <meta name="twitter:description" content="Free, open-source launcher to play Windows Steam games on Apple Silicon Macs. No subscriptions. No terminal required.">
+  <meta name="twitter:image" content="https://mont127.github.io/MacNdCheese/icon.png">
 
-.tagline{
-font-size:22px;
-opacity:.8;
-margin-bottom:40px
-}
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "MacNCheese",
+    "operatingSystem": "macOS",
+    "applicationCategory": "GameApplication",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "description": "Free, open-source launcher to play Windows Steam games on Apple Silicon Macs using Wine, DXVK, and MoltenVK.",
+    "url": "https://mont127.github.io/MacNdCheese/",
+    "downloadUrl": "https://github.com/mont127/MacNdCheese/releases",
+    "softwareVersion": "3.0.1"
+  }
+  </script>
 
-.buttons{
-display:flex;
-gap:20px;
-justify-content:center;
-flex-wrap:wrap
-}
+  <!-- Fonts (Roboto — Material Design) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-.button{
-padding:16px 36px;
-border-radius:12px;
-font-size:18px;
-text-decoration:none;
-color:black;
-background:#ffd166;
-font-weight:600
-}
+  <style>
+    /* ─── Material Design 3 Design Tokens ───────────────────────────── */
+    :root {
+      --md-primary:           #ffd166;
+      --md-on-primary:        #1a1200;
+      --md-primary-container: #3d2e00;
+      --md-on-primary-cont:   #ffdf9e;
+      --md-surface:           #111111;
+      --md-surface-var:       #1c1c1c;
+      --md-surface-cont:      #1e1c18;
+      --md-surface-cont-hi:   #282622;
+      --md-on-surface:        #e8e1d8;
+      --md-on-surface-var:    #b5ae9f;
+      --md-outline:           #524b3e;
+      --md-outline-var:       #2e2b24;
+      --md-success:           #a3d977;
+      --md-error:             #ffb4ab;
 
-.button.secondary{
-background:#2a2a2a;
-color:white
-}
+      --shape-xl: 28px;
+      --shape-lg: 16px;
+      --shape-md: 12px;
+      --shape-sm: 8px;
+      --shape-full: 9999px;
+    }
 
-.features{
-margin-top:60px;
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
-gap:25px
-}
+    /* ─── Reset ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
 
-.feature{
-background:#1a1a1a;
-padding:25px;
-border-radius:14px;
-font-size:18px
-}
+    body {
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--md-surface);
+      color: var(--md-on-surface);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
 
-.footer{
-margin-top:60px;
-opacity:.6;
-font-size:15px
-}
-</style>
+    /* ─── Top App Bar ────────────────────────────────────────────────── */
+    .app-bar {
+      position: sticky; top: 0; z-index: 100;
+      height: 64px;
+      padding: 0 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(17,17,17,.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--md-outline-var);
+    }
+
+    .app-bar-brand {
+      display: flex; align-items: center; gap: 12px;
+      text-decoration: none; color: var(--md-on-surface);
+    }
+    .app-bar-brand img { width: 32px; height: 32px; border-radius: 8px; }
+    .app-bar-brand span { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+
+    .app-bar-nav { display: flex; align-items: center; gap: 4px; }
+
+    /* ─── Buttons ────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 24px;
+      border-radius: var(--shape-full);
+      font-family: inherit; font-size: 14px; font-weight: 500;
+      letter-spacing: 0.1px; line-height: 1;
+      text-decoration: none; cursor: pointer; border: none;
+      transition: box-shadow .18s, opacity .18s, transform .1s;
+      white-space: nowrap;
+    }
+    .btn:active { transform: scale(.97); }
+
+    .btn-filled  { background: var(--md-primary); color: var(--md-on-primary); }
+    .btn-filled:hover { box-shadow: 0 2px 12px rgba(255,209,102,.35); opacity: .92; }
+
+    .btn-tonal   { background: var(--md-primary-container); color: var(--md-on-primary-cont); }
+    .btn-tonal:hover { opacity: .85; }
+
+    .btn-outlined {
+      background: transparent; color: var(--md-primary);
+      border: 1px solid var(--md-outline);
+    }
+    .btn-outlined:hover { background: rgba(255,209,102,.07); }
+
+    .btn-text { background: transparent; color: var(--md-primary); padding: 10px 16px; }
+    .btn-text:hover { background: rgba(255,209,102,.07); }
+
+    .btn-lg { padding: 14px 32px; font-size: 16px; }
+
+    /* ─── Hero ───────────────────────────────────────────────────────── */
+    .hero {
+      min-height: calc(100vh - 64px);
+      display: flex; align-items: center; justify-content: center;
+      text-align: center;
+      padding: 80px 24px;
+      background:
+        radial-gradient(ellipse 80% 55% at 50% -5%, rgba(255,209,102,.13) 0%, transparent 65%),
+        radial-gradient(ellipse 40% 40% at 80% 80%, rgba(255,209,102,.04) 0%, transparent 60%);
+    }
+    .hero-inner { max-width: 760px; }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--md-primary-container); color: var(--md-on-primary-cont);
+      padding: 6px 16px; border-radius: var(--shape-full);
+      font-size: 13px; font-weight: 500; letter-spacing: .3px;
+      margin-bottom: 32px;
+    }
+    .badge-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--md-primary);
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .hero-logo {
+      width: 96px; height: 96px; border-radius: 22px;
+      margin-bottom: 28px;
+      box-shadow: 0 8px 40px rgba(255,209,102,.18);
+    }
+
+    .hero h1 {
+      font-size: clamp(48px, 9vw, 80px);
+      font-weight: 700; letter-spacing: -3px; line-height: 1.0;
+      margin-bottom: 24px;
+      background: linear-gradient(140deg, #ffffff 0%, var(--md-primary) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      font-size: clamp(17px, 2.5vw, 21px);
+      color: var(--md-on-surface-var);
+      font-weight: 300;
+      max-width: 520px; margin: 0 auto 44px;
+    }
+
+    .hero-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+
+    .hero-meta {
+      margin-top: 52px;
+      display: flex; align-items: center; justify-content: center;
+      gap: 28px; flex-wrap: wrap;
+      color: var(--md-on-surface-var); font-size: 14px;
+    }
+    .hero-meta-item { display: flex; align-items: center; gap: 7px; }
+
+    /* ─── Section Scaffolding ────────────────────────────────────────── */
+    section { padding: 96px 24px; }
+
+    .section-inner { max-width: 1100px; margin: 0 auto; }
+
+    .section-eyebrow {
+      font-size: 12px; font-weight: 600; letter-spacing: 1.8px;
+      text-transform: uppercase; color: var(--md-primary); margin-bottom: 12px;
+    }
+
+    .section-title {
+      font-size: clamp(26px, 3.5vw, 38px);
+      font-weight: 700; letter-spacing: -0.5px; margin-bottom: 14px;
+    }
+
+    .section-sub {
+      font-size: 17px; font-weight: 300;
+      color: var(--md-on-surface-var); max-width: 580px; margin-bottom: 52px;
+    }
+    .section-sub a { color: var(--md-primary); text-decoration: none; }
+    .section-sub a:hover { text-decoration: underline; }
+
+    /* ─── Features ───────────────────────────────────────────────────── */
+    .features-bg { background: var(--md-surface); }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+
+    .feature-card {
+      background: var(--md-surface-var);
+      border: 1px solid var(--md-outline-var);
+      border-radius: var(--shape-lg);
+      padding: 28px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .feature-card:hover {
+      border-color: rgba(255,209,102,.28);
+      box-shadow: 0 4px 24px rgba(0,0,0,.28);
+    }
+
+    .feature-icon {
+      width: 48px; height: 48px;
+      background: var(--md-primary-container);
+      border-radius: var(--shape-md);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; margin-bottom: 18px;
+    }
+    .feature-card h3 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+    .feature-card p  { font-size: 14px; color: var(--md-on-surface-var); line-height: 1.65; }
+
+    /* ─── Steps ──────────────────────────────────────────────────────── */
+    .steps-bg { background: var(--md-surface-var); }
+
+    .steps { display: flex; flex-direction: column; max-width: 680px; }
+
+    .step { display: flex; gap: 24px; position: relative; }
+    .step:not(:last-child)::after {
+      content: '';
+      position: absolute; left: 19px; top: 48px; bottom: -20px;
+      width: 2px; background: var(--md-outline-var);
+    }
+
+    .step-num {
+      flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
+      background: var(--md-primary-container); color: var(--md-on-primary-cont);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; position: relative; z-index: 1;
+    }
+    .step-body { padding-bottom: 40px; }
+    .step-body h3 { font-size: 17px; font-weight: 600; margin: 8px 0 8px; }
+    .step-body p  { font-size: 15px; color: var(--md-on-surface-var); line-height: 1.65; }
+    .step-body a  { color: var(--md-primary); text-decoration: none; }
+    .step-body a:hover { text-decoration: underline; }
+
+    /* ─── Compatibility ──────────────────────────────────────────────── */
+    .compat-bg { background: var(--md-surface); }
+
+    .compat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .compat-card {
+      border-radius: var(--shape-lg); border: 1px solid var(--md-outline-var); padding: 28px;
+    }
+    .compat-card.works   { background: rgba(163,217,119,.05); border-color: rgba(163,217,119,.2); }
+    .compat-card.no-work { background: rgba(255,180,171,.05); border-color: rgba(255,180,171,.2); }
+
+    .compat-card h3 {
+      font-size: 16px; font-weight: 600; margin-bottom: 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .compat-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+    .compat-list li {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 14px; color: var(--md-on-surface-var);
+    }
+    .cdot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .works   .cdot { background: var(--md-success); }
+    .no-work .cdot { background: var(--md-error); }
+
+    .compat-note {
+      margin-top: 16px; font-size: 12px;
+      color: var(--md-on-surface-var); opacity: .65; line-height: 1.55;
+    }
+
+    /* ─── Tech Stack ─────────────────────────────────────────────────── */
+    .tech-bg { background: var(--md-surface-var); }
+
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+    }
+
+    .tech-card {
+      background: var(--md-surface);
+      border: 1px solid var(--md-outline-var);
+      border-radius: var(--shape-md);
+      padding: 20px;
+      transition: border-color .2s;
+    }
+    .tech-card:hover { border-color: rgba(255,209,102,.3); }
+    .tech-card a { text-decoration: none; color: inherit; }
+    .tech-card h4 { font-size: 15px; font-weight: 600; color: var(--md-primary); margin-bottom: 6px; }
+    .tech-card p  { font-size: 13px; color: var(--md-on-surface-var); }
+
+    /* ─── FAQ ────────────────────────────────────────────────────────── */
+    .faq-bg { background: var(--md-surface); }
+
+    .faq-list { display: flex; flex-direction: column; gap: 10px; max-width: 800px; }
+
+    details {
+      background: var(--md-surface-var);
+      border: 1px solid var(--md-outline-var);
+      border-radius: var(--shape-md);
+      overflow: hidden; transition: border-color .2s;
+    }
+    details[open] { border-color: rgba(255,209,102,.28); }
+
+    summary {
+      padding: 18px 22px; cursor: pointer;
+      font-size: 16px; font-weight: 500;
+      display: flex; justify-content: space-between; align-items: center;
+      list-style: none; user-select: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::after {
+      content: '+'; color: var(--md-primary);
+      font-size: 22px; font-weight: 300; flex-shrink: 0;
+      transition: transform .2s; margin-left: 16px;
+    }
+    details[open] summary::after { transform: rotate(45deg); }
+
+    .faq-body {
+      padding: 0 22px 20px;
+      font-size: 14px; color: var(--md-on-surface-var); line-height: 1.7;
+    }
+    .faq-body table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+    .faq-body th {
+      text-align: left; padding: 9px 12px;
+      background: var(--md-surface); font-size: 12px; font-weight: 600;
+      letter-spacing: .5px; text-transform: uppercase;
+      color: var(--md-on-surface-var);
+      border-bottom: 1px solid var(--md-outline-var);
+    }
+    .faq-body td {
+      padding: 9px 12px; font-size: 13px;
+      border-bottom: 1px solid var(--md-outline-var);
+    }
+    .faq-body td:first-child { color: var(--md-primary); font-weight: 500; }
+    .faq-body ol { margin: 12px 0 0 20px; display: flex; flex-direction: column; gap: 6px; }
+
+    /* ─── CTA ────────────────────────────────────────────────────────── */
+    .cta-bg { background: var(--md-surface-var); }
+
+    .cta-card {
+      background: linear-gradient(140deg, var(--md-primary-container) 0%, rgba(20,18,15,.8) 100%);
+      border: 1px solid rgba(255,209,102,.18);
+      border-radius: var(--shape-xl);
+      padding: 64px 40px; max-width: 700px; margin: 0 auto; text-align: center;
+    }
+    .cta-card h2 {
+      font-size: clamp(26px, 3.5vw, 38px);
+      font-weight: 700; letter-spacing: -.5px; margin-bottom: 14px;
+    }
+    .cta-card p {
+      font-size: 17px; font-weight: 300;
+      color: var(--md-on-surface-var); margin-bottom: 36px;
+    }
+    .cta-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+
+    /* ─── Footer ─────────────────────────────────────────────────────── */
+    footer {
+      background: var(--md-surface);
+      border-top: 1px solid var(--md-outline-var);
+      padding: 48px 24px 32px;
+    }
+    .footer-top {
+      max-width: 1100px; margin: 0 auto;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      flex-wrap: wrap; gap: 32px; margin-bottom: 36px;
+    }
+    .footer-brand { display: flex; flex-direction: column; gap: 12px; }
+    .footer-brand-name {
+      font-size: 18px; font-weight: 700;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .footer-brand-name img { width: 28px; height: 28px; border-radius: 6px; }
+    .footer-desc {
+      font-size: 14px; color: var(--md-on-surface-var);
+      max-width: 300px; line-height: 1.6;
+    }
+    .footer-links { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
+    .footer-links a {
+      font-size: 14px; color: var(--md-on-surface-var);
+      text-decoration: none; transition: color .2s;
+    }
+    .footer-links a:hover { color: var(--md-primary); }
+    .footer-bottom {
+      max-width: 1100px; margin: 0 auto;
+      padding-top: 24px; border-top: 1px solid var(--md-outline-var);
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 12px;
+    }
+    .footer-bottom p { font-size: 13px; color: var(--md-on-surface-var); opacity: .6; }
+    .footer-bottom a { color: var(--md-primary); text-decoration: none; }
+
+    /* ─── Divider ────────────────────────────────────────────────────── */
+    .divider { height: 1px; background: var(--md-outline-var); }
+
+    /* ─── Responsive ─────────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .app-bar-nav .btn-text { display: none; }
+      .cta-card { padding: 40px 24px; }
+      .footer-top { flex-direction: column; }
+      .footer-bottom { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
 </head>
 <body>
 
-<div class="container">
+<!-- ── Top App Bar ─────────────────────────────────────────────────── -->
+<header class="app-bar" role="banner">
+  <a href="#" class="app-bar-brand" aria-label="MacNCheese home">
+    <img src="icon.png" alt="MacNCheese" width="32" height="32">
+    <span>MacNCheese</span>
+  </a>
+  <nav class="app-bar-nav" aria-label="Site navigation">
+    <a href="#features"     class="btn btn-text">Features</a>
+    <a href="#how-it-works" class="btn btn-text">Guide</a>
+    <a href="#faq"          class="btn btn-text">FAQ</a>
+    <a href="https://github.com/mont127/MacNdCheese/releases/download/v3.0.1/MacNCheese.dmg"
+       class="btn btn-filled" aria-label="Download MacNCheese">Download</a>
+  </nav>
+</header>
 
-<h1>MacNCheese</h1>
+<main id="main-content">
 
-<div class="tagline">
-Run Windows Games on macOS
-</div>
+  <!-- ── Hero ───────────────────────────────────────────────────────── -->
+  <section class="hero" aria-labelledby="hero-heading">
+    <div class="hero-inner">
+      <div class="hero-badge">
+        <span class="badge-dot"></span>
+        Free &amp; Open Source &middot; Apple Silicon
+      </div>
 
-<div class="buttons">
-<a class="button" href="https://github.com/mont127/MacNdCheese/releases/download/v3.0.1/MacNCheese.dmg">Download</a>
-<a class="button secondary" href="https://github.com/mont127/MacNdCheese">GitHub</a>
-</div>
+      <img src="icon.png" alt="MacNCheese app icon" class="hero-logo" width="96" height="96">
 
-<div class="features">
-<div class="feature">Wine Manager</div>
-<div class="feature">DXVK Ready</div>
-<div class="feature">Apple Silicon Optimized</div>
-<div class="feature">Open Source</div>
-</div>
+      <h1 id="hero-heading">MacNCheese</h1>
 
-<div class="footer">
-Free Open Source Software
-</div>
+      <p class="hero-sub">
+        Run Windows Steam games on your Mac —<br>
+        no subscriptions, no terminal, no nonsense.
+      </p>
 
-</div>
+      <div class="hero-actions">
+        <a href="https://github.com/mont127/MacNdCheese/releases/download/v3.0.1/MacNCheese.dmg"
+           class="btn btn-filled btn-lg"
+           aria-label="Download MacNCheese DMG for macOS">
+          &#8595; Download for macOS
+        </a>
+        <a href="https://github.com/mont127/MacNdCheese"
+           class="btn btn-outlined btn-lg"
+           target="_blank" rel="noopener"
+           aria-label="View MacNCheese on GitHub">
+          GitHub &rarr;
+        </a>
+      </div>
+
+      <div class="hero-meta" aria-label="At a glance">
+        <div class="hero-meta-item">
+          <span aria-hidden="true">&#127822;</span>
+          <span>Apple Silicon M1&ndash;M4</span>
+        </div>
+        <div class="hero-meta-item">
+          <span aria-hidden="true">&#127918;</span>
+          <span>Windows Steam Games</span>
+        </div>
+        <div class="hero-meta-item">
+          <span aria-hidden="true">&#9889;</span>
+          <span>Wine + DXVK + MoltenVK</span>
+        </div>
+        <div class="hero-meta-item">
+          <span aria-hidden="true">&#128275;</span>
+          <span>100% Free, Forever</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Features ───────────────────────────────────────────────────── -->
+  <section class="features-bg" id="features" aria-labelledby="features-heading">
+    <div class="section-inner">
+      <p class="section-eyebrow">Why MacNCheese</p>
+      <h2 class="section-title" id="features-heading">Everything set up automatically</h2>
+      <p class="section-sub">MacNCheese handles Wine, DXVK, MoltenVK, and more so you can focus on gaming.</p>
+      <div class="features-grid">
+
+        <article class="feature-card">
+          <div class="feature-icon" aria-hidden="true">&#127863;</div>
+          <h3>Wine Manager</h3>
+          <p>Installs and manages Wine automatically. No Homebrew, no manual configuration, no terminal commands required.</p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon" aria-hidden="true">&#128250;</div>
+          <h3>DXVK &amp; VKD3D-Proton</h3>
+          <p>Translates DirectX 9&ndash;12 to Vulkan, then to Metal via MoltenVK. Most games work out of the box.</p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon" aria-hidden="true">&#9889;</div>
+          <h3>Apple Silicon Optimized</h3>
+          <p>Built specifically for M1, M2, M3, and M4 chips. Takes full advantage of the ARM architecture and Metal GPU API.</p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon" aria-hidden="true">&#127918;</div>
+          <h3>Steam Integration</h3>
+          <p>Install Steam for Windows inside Wine with one click. Your game library appears automatically in MacNCheese.</p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon" aria-hidden="true">&#128295;</div>
+          <h3>Smart Auto Mode</h3>
+          <p>Not sure which backend to pick? Auto mode detects your game and selects the best option — DXVK, VKD3D-Proton, or DXMT.</p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon" aria-hidden="true">&#128275;</div>
+          <h3>Open Source</h3>
+          <p>Every line of code is public on GitHub. No tracking, no telemetry, no hidden costs. Fork it, inspect it, improve it.</p>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── How It Works ───────────────────────────────────────────────── -->
+  <section class="steps-bg" id="how-it-works" aria-labelledby="how-heading">
+    <div class="section-inner">
+      <p class="section-eyebrow">Getting Started</p>
+      <h2 class="section-title" id="how-heading">Up and running in minutes</h2>
+      <p class="section-sub">Four simple steps from download to gaming.</p>
+
+      <ol class="steps" role="list">
+
+        <li class="step">
+          <div class="step-num" aria-label="Step 1">1</div>
+          <div class="step-body">
+            <h3>Download Steam for Windows</h3>
+            <p>Go to <a href="https://store.steampowered.com/about/" target="_blank" rel="noopener">store.steampowered.com</a> and grab <strong>SteamSetup.exe</strong> (the Windows version). Save it to your Downloads folder.</p>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-num" aria-label="Step 2">2</div>
+          <div class="step-body">
+            <h3>Install MacNCheese</h3>
+            <p>Download the <code>.dmg</code>, open it, drag MacNCheese to Applications, and launch it. If macOS says it&rsquo;s unverified, open <strong>System Settings &rarr; Privacy &amp; Security</strong> and click <strong>Open Anyway</strong>.</p>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-num" aria-label="Step 3">3</div>
+          <div class="step-body">
+            <h3>Click Install &amp; Set Up Steam</h3>
+            <p>Hit <strong>Install</strong> to set up Wine and all graphics dependencies automatically. Then click <strong>Install Steam</strong> &mdash; the Windows installer will guide you through logging into your account.</p>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-num" aria-label="Step 4">4</div>
+          <div class="step-body">
+            <h3>Launch your game</h3>
+            <p>Open Steam from the app&rsquo;s top bar, install your game, then return to MacNCheese. Select your game from the list and hit <strong>Launch</strong>. Leave the backend on <strong>Auto</strong> if you&rsquo;re unsure.</p>
+          </div>
+        </li>
+
+      </ol>
+    </div>
+  </section>
+
+  <!-- ── Compatibility ──────────────────────────────────────────────── -->
+  <section class="compat-bg" id="compatibility" aria-labelledby="compat-heading">
+    <div class="section-inner">
+      <p class="section-eyebrow">Compatibility</p>
+      <h2 class="section-title" id="compat-heading">What works, what doesn&rsquo;t</h2>
+      <p class="section-sub">MacNCheese handles most games — but some technical limitations apply.</p>
+
+      <div class="compat-grid">
+
+        <article class="compat-card works" aria-label="Games and features that work">
+          <h3><span style="color:var(--md-success)" aria-hidden="true">&#10003;</span> Works great</h3>
+          <ul class="compat-list">
+            <li><span class="cdot" aria-hidden="true"></span>DirectX 11 games (most common)</li>
+            <li><span class="cdot" aria-hidden="true"></span>DirectX 12 games (via VKD3D-Proton)</li>
+            <li><span class="cdot" aria-hidden="true"></span>Unity engine games</li>
+            <li><span class="cdot" aria-hidden="true"></span>DirectX 9 games (hit or miss)</li>
+            <li><span class="cdot" aria-hidden="true"></span>R.E.P.O., ULTRAKILL, People Playground</li>
+            <li><span class="cdot" aria-hidden="true"></span>Among Us, SCP: Containment Breach</li>
+            <li><span class="cdot" aria-hidden="true"></span>Cry of Fear, Warframe (experimental)</li>
+            <li><span class="cdot" aria-hidden="true"></span>TF2 (casual — competitive blocked by VAC)</li>
+          </ul>
+        </article>
+
+        <article class="compat-card no-work" aria-label="Games and features that do not work">
+          <h3><span style="color:var(--md-error)" aria-hidden="true">&#10007;</span> Known limitations</h3>
+          <ul class="compat-list">
+            <li><span class="cdot" aria-hidden="true"></span>Easy Anti-Cheat (EAC) protected games</li>
+            <li><span class="cdot" aria-hidden="true"></span>BattlEye-protected games</li>
+            <li><span class="cdot" aria-hidden="true"></span>Vanguard (Valorant, etc.)</li>
+            <li><span class="cdot" aria-hidden="true"></span>TF2 competitive (VAC kernel module)</li>
+            <li><span class="cdot" aria-hidden="true"></span>Intel Macs (unsupported)</li>
+          </ul>
+          <p class="compat-note">Anti-cheat software requires deep Windows kernel access that Wine cannot provide. This is a Wine limitation, not specific to MacNCheese.</p>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Tech Stack ─────────────────────────────────────────────────── -->
+  <section class="tech-bg" aria-labelledby="tech-heading">
+    <div class="section-inner">
+      <p class="section-eyebrow">Powered By</p>
+      <h2 class="section-title" id="tech-heading">Open source, all the way down</h2>
+      <p class="section-sub">MacNCheese wouldn&rsquo;t exist without these incredible projects.</p>
+      <div class="tech-grid">
+
+        <div class="tech-card">
+          <a href="https://www.winehq.org/" target="_blank" rel="noopener">
+            <h4>Wine</h4>
+            <p>Runs Windows software on macOS</p>
+          </a>
+        </div>
+
+        <div class="tech-card">
+          <a href="https://github.com/Gcenx/DXVK-macOS" target="_blank" rel="noopener">
+            <h4>DXVK</h4>
+            <p>DirectX 10/11 &rarr; Vulkan</p>
+          </a>
+        </div>
+
+        <div class="tech-card">
+          <a href="https://github.com/KhronosGroup/MoltenVK" target="_blank" rel="noopener">
+            <h4>MoltenVK</h4>
+            <p>Vulkan &rarr; Metal (Apple GPU)</p>
+          </a>
+        </div>
+
+        <div class="tech-card">
+          <a href="https://github.com/HansKristian-Work/vkd3d-proton" target="_blank" rel="noopener">
+            <h4>VKD3D-Proton</h4>
+            <p>DirectX 12 &rarr; Vulkan</p>
+          </a>
+        </div>
+
+        <div class="tech-card">
+          <a href="https://github.com/3Shain/dxmt" target="_blank" rel="noopener">
+            <h4>DXMT</h4>
+            <p>DirectX 11 &rarr; Metal (direct)</p>
+          </a>
+        </div>
+
+        <div class="tech-card">
+          <a href="https://github.com/Whisky-App/Whisky" target="_blank" rel="noopener">
+            <h4>Whisky</h4>
+            <p>Inspiration &amp; predecessor</p>
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FAQ ────────────────────────────────────────────────────────── -->
+  <section class="faq-bg" id="faq" aria-labelledby="faq-heading">
+    <div class="section-inner">
+      <p class="section-eyebrow">FAQ</p>
+      <h2 class="section-title" id="faq-heading">Frequently asked questions</h2>
+      <p class="section-sub">
+        Still have questions? Join the
+        <a href="https://discord.gg/UPpVShYDaf" target="_blank" rel="noopener">Discord server</a>.
+      </p>
+
+      <div class="faq-list">
+
+        <details>
+          <summary>What is MacNCheese?</summary>
+          <div class="faq-body">
+            MacNCheese is a free launcher that runs Windows Steam games on macOS using Wine. It automatically sets up all the technical components — graphics translation layers, DLL overrides, Wine prefixes — so you never have to touch the terminal. Think of it as Proton, but for Mac.
+          </div>
+        </details>
+
+        <details>
+          <summary>Is it free?</summary>
+          <div class="faq-body">
+            100% free and open source, forever. No subscriptions, no paywalls, no premium tiers. The source code is on GitHub and contributions are always welcome.
+          </div>
+        </details>
+
+        <details>
+          <summary>Does it work on Intel Macs?</summary>
+          <div class="faq-body">
+            Officially, no. MacNCheese is built and tested for Apple Silicon (M1, M2, M3, M4). Intel Macs are not the target platform. You might get it running from source, but it&rsquo;s unsupported.
+          </div>
+        </details>
+
+        <details>
+          <summary>Which graphics backend should I pick?</summary>
+          <div class="faq-body">
+            <p>Leave it on <strong>Auto</strong> and MacNCheese will choose the best backend for your game. If you need to manually select:</p>
+            <table>
+              <thead><tr><th>Backend</th><th>Best For</th></tr></thead>
+              <tbody>
+                <tr><td>DXVK</td><td>Most DirectX 10/11 games</td></tr>
+                <tr><td>VKD3D-Proton</td><td>DirectX 12 games</td></tr>
+                <tr><td>DXMT</td><td>Experimental DX11 via Metal</td></tr>
+                <tr><td>Mesa</td><td>Fallback / debugging</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <details>
+          <summary>My game says &ldquo;DirectX 11 not available&rdquo; — how do I fix it?</summary>
+          <div class="faq-body">
+            The graphics backend didn&rsquo;t load properly. Try these steps:
+            <ol>
+              <li>Make sure Wine is installed (click Install Wine)</li>
+              <li>Switch the backend to DXVK explicitly</li>
+              <li>Re-launch the game from MacNCheese, not from Steam directly</li>
+            </ol>
+          </div>
+        </details>
+
+        <details>
+          <summary>Do Steam and my game need to be in the same Wine prefix?</summary>
+          <div class="faq-body">
+            Yes. Keep everything in the same Wine prefix &mdash; the default one is fine and recommended. Mixing prefixes will cause games to fail to find Steam dependencies or not launch at all.
+          </div>
+        </details>
+
+        <details>
+          <summary>How is this different from Whisky?</summary>
+          <div class="faq-body">
+            MacNCheese has its own architecture and is focused on running Windows Steam games with a configurable runtime that behaves like Proton. Whisky is the inspiration, but MacNCheese is a distinct, independently developed project with different goals.
+          </div>
+        </details>
+
+        <details>
+          <summary>How do I build from source?</summary>
+          <div class="faq-body">
+            <p>You&rsquo;ll need macOS with Homebrew and Xcode Command Line Tools installed.</p>
+            <ol>
+              <li>Clone: <code>git clone https://github.com/mont127/MacNdCheese/</code></li>
+              <li>Set up env: <code>uv venv &amp;&amp; source .venv/bin/activate</code></li>
+              <li>Install deps: <code>uv pip install -r requirements.txt</code></li>
+              <li>Run: <code>uv run MacNCheese.py</code></li>
+            </ol>
+          </div>
+        </details>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CTA ────────────────────────────────────────────────────────── -->
+  <section class="cta-bg" aria-labelledby="cta-heading">
+    <div class="section-inner">
+      <div class="cta-card">
+        <h2 id="cta-heading">Ready to play?</h2>
+        <p>Download MacNCheese and start running your Windows game library on macOS today.</p>
+        <div class="cta-actions">
+          <a href="https://github.com/mont127/MacNdCheese/releases/download/v3.0.1/MacNCheese.dmg"
+             class="btn btn-filled btn-lg"
+             aria-label="Download MacNCheese for macOS">
+            &#8595; Download for macOS
+          </a>
+          <a href="https://discord.gg/UPpVShYDaf"
+             class="btn btn-tonal btn-lg"
+             target="_blank" rel="noopener"
+             aria-label="Join the MacNCheese Discord community">
+            Join Discord
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ── Footer ─────────────────────────────────────────────────────── -->
+<footer role="contentinfo">
+  <div class="footer-top">
+    <div class="footer-brand">
+      <div class="footer-brand-name">
+        <img src="icon.png" alt="" aria-hidden="true" width="28" height="28">
+        MacNCheese
+      </div>
+      <p class="footer-desc">
+        Free, open-source Windows game launcher for Apple Silicon Macs.
+        Built with Wine, DXVK, and MoltenVK.
+      </p>
+    </div>
+    <nav class="footer-links" aria-label="Footer links">
+      <a href="https://github.com/mont127/MacNdCheese" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/mont127/MacNdCheese/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://discord.gg/UPpVShYDaf" target="_blank" rel="noopener">Discord</a>
+      <a href="https://github.com/mont127/MacNdCheese/issues" target="_blank" rel="noopener">Issues</a>
+    </nav>
+  </div>
+  <div class="footer-bottom">
+    <p>&copy; 2024 MacNCheese contributors. Use at your own risk. &middot; <a href="mailto:deepwokenpersona@gmail.com">Contact</a></p>
+    <p>Made with love for Mac gamers &middot; <a href="https://github.com/mont127/MacNdCheese" target="_blank" rel="noopener">View on GitHub</a></p>
+  </div>
+</footer>
 
 </body>
 </html>

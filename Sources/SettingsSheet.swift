@@ -329,9 +329,9 @@ struct SetupSettingsTab: View {
     @State private var installMesa = false
     @State private var buildDxvk = false
     @State private var buildDxvk32 = false
+    @State private var installVkd3d = false
+    @State private var installD3dMetal = false
     @State private var installGptkFull = false
-    @State private var installD3dMetal3 = false
-    @State private var importGptkDlls = false
 
     var body: some View {
         ScrollView {
@@ -349,7 +349,7 @@ struct SetupSettingsTab: View {
                         Button("Everything") {
                             installTools = true; installWine = true
                             installMesa = true; buildDxvk = true; buildDxvk32 = true
-                            installGptkFull = true; installD3dMetal3 = true; importGptkDlls = true
+                            installVkd3d = true; installD3dMetal = true; installGptkFull = true
                         }
                         .buttonStyle(.bordered)
                         .help("Select all components")
@@ -368,14 +368,14 @@ struct SetupSettingsTab: View {
 
                         Divider()
 
-                        Toggle("Install GPTK Full (Experimental)", isOn: $installGptkFull)
-                            .foregroundStyle(.yellow)
+                        Toggle("Install VKD3D-Proton", isOn: $installVkd3d)
+                            .foregroundStyle(.orange)
                             .fontWeight(.semibold)
-                        Toggle("Install D3DMetal 3 (Prebuilt)", isOn: $installD3dMetal3)
+                        Toggle("Install D3DMetal (GPTK DLLs)", isOn: $installD3dMetal)
                             .foregroundStyle(.cyan)
                             .fontWeight(.semibold)
-                        Toggle("Import GPTK DLLs", isOn: $importGptkDlls)
-                            .foregroundStyle(.blue)
+                        Toggle("Install GPTK Full (Experimental)", isOn: $installGptkFull)
+                            .foregroundStyle(.yellow)
                             .fontWeight(.semibold)
                     }
                     .padding(8)
@@ -421,7 +421,7 @@ struct SetupSettingsTab: View {
 
     private var anySelected: Bool {
         installTools || installWine || installMesa || buildDxvk || buildDxvk32
-        || installGptkFull || installD3dMetal3 || importGptkDlls
+        || installVkd3d || installD3dMetal || installGptkFull
     }
 
     private func runInstall() {
@@ -454,9 +454,9 @@ struct SetupSettingsTab: View {
         if installWine { actions.append("install_wine") }
         if buildDxvk || buildDxvk32 { actions.append("install_dxvk") }
         if installMesa { actions.append("install_mesa") }
+        if installVkd3d { actions.append("install_vkd3d") }
+        if installD3dMetal { actions.append("install_gptk_dlls") }
         if installGptkFull { actions.append("install_dxmt") }
-        if installD3dMetal3 { actions.append("install_vkd3d") }
-        if importGptkDlls { actions.append("quick_setup") }
 
         if actions.isEmpty {
             runningAction = "No actions selected"

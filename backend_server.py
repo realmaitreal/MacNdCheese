@@ -953,6 +953,38 @@ def cmd_launch_steam(params: Dict[str, Any]) -> Any:
     if not wine:
         raise FileNotFoundError("Wine not found. Install Wine first.")
 
+    # Check if this bottle has a custom launcher exe set
+    key = _resolve_key(prefix)
+    bottle_cfg = _load_bottles().get(key, {})
+    launcher_exe = bottle_cfg.get("launcher_exe", "").strip()
+
+    if launcher_exe and Path(launcher_exe).exists():
+        # Launch the custom exe instead of Steam
+        log(f"Using custom launcher_exe: {launcher_exe}")
+        env = _wine_env(prefix)
+        resolved = _resolve_auto_backend()
+        env = _apply_backend_env(env, resolved)
+        _apply_retina_regedit(wine, env, retina_mode)
+        exe_path = Path(launcher_exe)
+        safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", exe_path.stem)
+        log_path = str(Path.home() / f"{safe_name}-wine.log")
+        cmd = (
+            f"cd {shlex.quote(str(exe_path.parent))} && "
+            f"arch -x86_64 {shlex.quote(wine)} "
+            f"{shlex.quote(str(exe_path))} "
+            f"> {shlex.quote(log_path)} 2>&1"
+        )
+        proc = subprocess.Popen(
+            ["bash", "-lc", cmd], env=env,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        _steam_process = proc
+        log(f"Custom launcher launched with PID {proc.pid}")
+        return {"pid": proc.pid, "log_path": log_path, "already_running": False}
+    elif launcher_exe:
+        log(f"Custom launcher_exe '{launcher_exe}' not found, falling back to Steam")
+
     steam_dir = Path(prefix) / "drive_c" / "Program Files (x86)" / "Steam"
     steam_exe = steam_dir / "steam.exe"
 
@@ -985,8 +1017,6 @@ def cmd_launch_steam(params: Dict[str, Any]) -> Any:
     safe_name = "Steam"
     log_path = str(Path.home() / f"{safe_name}-wine.log")
 
-    # Build the command exactly as the original app does:
-    #   wine steam.exe -no-browser -vgui
     cmd = (
         f"cd {shlex.quote(str(steam_dir))} && "
         f"arch -x86_64 {shlex.quote(wine)} "
@@ -1006,6 +1036,60 @@ def cmd_launch_steam(params: Dict[str, Any]) -> Any:
     _steam_process = proc
     log(f"Steam launched with PID {proc.pid}, log at {log_path}")
 
+    return {"pid": proc.pid, "log_path": log_path, "already_running": False}
+
+
+def cmd_launch_launcher(params: Dict[str, Any]) -> Any:
+    """Launch the custom launcher_exe for a non-steam bottle.
+    Falls back to a plain wine explorer if none is set."""
+    global _steam_process
+
+    prefix = params.get("prefix")
+    retina_mode = params.get("retina_mode", False)
+    if not prefix:
+        raise ValueError("Missing 'prefix' parameter")
+
+    if _steam_process is not None and _steam_process.poll() is None:
+        return {"already_running": True, "pid": _steam_process.pid}
+
+    wine = _find_wine()
+    if not wine:
+        raise FileNotFoundError("Wine not found. Install Wine first.")
+
+    key = _resolve_key(prefix)
+    bottle_cfg = _load_bottles().get(key, {})
+    launcher_exe = bottle_cfg.get("launcher_exe", "").strip()
+
+    if not launcher_exe or not Path(launcher_exe).exists():
+        raise FileNotFoundError(
+            "No launcher exe configured for this bottle, or the file doesn't exist.\n"
+            "Set one in Settings → Bottle → Launcher exe."
+        )
+
+    env = _wine_env(prefix)
+    resolved = _resolve_auto_backend()
+    env = _apply_backend_env(env, resolved)
+    _apply_retina_regedit(wine, env, retina_mode)
+
+    exe_path = Path(launcher_exe)
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", exe_path.stem)
+    log_path = str(Path.home() / f"{safe_name}-wine.log")
+
+    cmd = (
+        f"cd {shlex.quote(str(exe_path.parent))} && "
+        f"arch -x86_64 {shlex.quote(wine)} "
+        f"{shlex.quote(str(exe_path))} "
+        f"> {shlex.quote(log_path)} 2>&1"
+    )
+
+    log(f"Launching custom launcher: bash -lc {cmd!r}")
+    proc = subprocess.Popen(
+        ["bash", "-lc", cmd], env=env,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    _steam_process = proc
+    log(f"Custom launcher PID {proc.pid}, log at {log_path}")
     return {"pid": proc.pid, "log_path": log_path, "already_running": False}
 
 
@@ -1101,6 +1185,23 @@ def cmd_create_bottle(params: Dict[str, Any]) -> Any:
         ).start()
 
     return {"path": path_str}
+
+
+def cmd_reorder_bottles(params: Dict[str, Any]) -> Any:
+    """Save a new bottle order. `paths` is the ordered list of prefix paths."""
+    paths = params.get("paths")
+    if not isinstance(paths, list):
+        raise ValueError("Missing 'paths' list parameter")
+    # Keep only paths that are already known, discard unknowns
+    existing = set(_resolve_key(p) for p in _load_prefixes())
+    ordered = [p for p in paths if _resolve_key(p) in existing]
+    # Append any that were in existing but not in the new order (safety)
+    ordered_keys = set(_resolve_key(p) for p in ordered)
+    for p in _load_prefixes():
+        if _resolve_key(p) not in ordered_keys:
+            ordered.append(p)
+    _save_prefixes(ordered)
+    return {"ok": True}
 
 
 def cmd_delete_bottle(params: Dict[str, Any]) -> Any:
@@ -1392,6 +1493,7 @@ COMMANDS: Dict[str, Any] = {
     "get_running_games": cmd_get_running_games,
     "get_steam_running": cmd_get_steam_running,
     "get_setup_pid": cmd_get_setup_pid,
+    "reorder_bottles": cmd_reorder_bottles,
 }
 
 # ---------------------------------------------------------------------------

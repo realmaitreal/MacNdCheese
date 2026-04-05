@@ -26,6 +26,11 @@ struct SidebarView: View {
                             }
                         }
                 }
+                .onMove { from, to in
+                    var paths = backend.bottles.map { $0.path }
+                    paths.move(fromOffsets: from, toOffset: to)
+                    Task { await backend.reorderBottles(paths: paths) }
+                }
             }
         }
         .listStyle(.sidebar)

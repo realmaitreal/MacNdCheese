@@ -58,8 +58,6 @@ struct BottleSettingsTab: View {
     @State private var bottleName = ""
     @State private var launcherExe = ""
     @State private var iconPath = ""
-    @State private var defaultBackend = "auto"
-    @State private var availableBackends: [GraphicsBackend] = []
     @State private var isInitializing = false
     @State private var isCleaning = false
 
@@ -107,22 +105,6 @@ struct BottleSettingsTab: View {
                         }
                     }
 
-                    // Default graphics backend
-                    SettingsRow(label: "Default Graphics Backend") {
-                        if availableBackends.isEmpty {
-                            Text("Loading…")
-                                .foregroundStyle(.secondary)
-                                .font(.caption)
-                        } else {
-                            Picker("", selection: $defaultBackend) {
-                                ForEach(availableBackends) { b in
-                                    Text(b.label).tag(b.backendId)
-                                }
-                            }
-                            .labelsHidden()
-                        }
-                    }
-
                     Divider()
 
                     // Action buttons
@@ -157,14 +139,12 @@ struct BottleSettingsTab: View {
                             }
                         }
 
-                        if bottle.isSteamBottle {
-                            ActionButton(
-                                title: "Open SteamSetup",
-                                subtitle: "Install or repair Steam",
-                                icon: "arrow.down.circle"
-                            ) {
-                                openSteamSetup(prefix: bottle.path)
-                            }
+                        ActionButton(
+                            title: "Open SteamSetup",
+                            subtitle: "Install or repair Steam",
+                            icon: "arrow.down.circle"
+                        ) {
+                            openSteamSetup(prefix: bottle.path)
                         }
 
                         ActionButton(
@@ -212,10 +192,7 @@ struct BottleSettingsTab: View {
             }
             .padding(20)
         }
-        .onAppear {
-            loadFields()
-            Task { await loadBackends() }
-        }
+        .onAppear { loadFields() }
         .onChange(of: backend.activePrefix) { loadFields() }
     }
 
@@ -224,13 +201,6 @@ struct BottleSettingsTab: View {
             bottleName = bottle.name
             launcherExe = bottle.launcherExe ?? ""
             iconPath = bottle.iconPath ?? ""
-            defaultBackend = bottle.defaultBackend ?? "auto"
-        }
-    }
-
-    private func loadBackends() async {
-        if let response = await backend.listBackends() {
-            availableBackends = response.backends
         }
     }
 
@@ -241,7 +211,6 @@ struct BottleSettingsTab: View {
                 "name": bottleName,
                 "launcher_exe": launcherExe,
                 "icon_path": iconPath,
-                "default_backend": defaultBackend,
             ])
         }
     }
@@ -348,16 +317,7 @@ struct PathRow: View {
     }
 }
 
-// MARK: - Setup Tab (Package Manager)
-
-private struct SetupComponent: Identifiable {
-    let id: String
-    let label: String
-    let installerAction: String
-    var isInstalled: Bool
-    var isSelected: Bool
-    var tint: Color = .primary
-}
+// MARK: - Setup Tab (Components)
 
 struct SetupSettingsTab: View {
     @EnvironmentObject var backend: BackendClient
@@ -376,12 +336,12 @@ struct SetupSettingsTab: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-
-                // Quick-select presets
-                GroupBox("Quick Select") {
+                // Quick Setup
+                GroupBox("Quick Setup") {
                     HStack(spacing: 12) {
                         Button("Minimal") {
-                            setSelected(ids: ["tools", "wine", "dxvk64", "dxvk32", "mesa"])
+                            installTools = true; installWine = true
+                            buildDxvk = true; buildDxvk32 = true; installMesa = true
                         }
                         .buttonStyle(.bordered)
                         .help("Select: Tools, Wine, DXVK (64/32), Mesa")
@@ -393,16 +353,11 @@ struct SetupSettingsTab: View {
                         }
                         .buttonStyle(.bordered)
                         .help("Select all components")
-
-                        Button("None") {
-                            components.indices.forEach { components[$0].isSelected = false }
-                        }
-                        .buttonStyle(.bordered)
                     }
                     .padding(8)
                 }
 
-                // Component list
+                // Components
                 GroupBox("Components") {
                     VStack(alignment: .leading, spacing: 8) {
                         Toggle("Install Tools (git, 7z, winetricks)", isOn: $installTools)
@@ -423,36 +378,45 @@ struct SetupSettingsTab: View {
                             .foregroundStyle(.yellow)
                             .fontWeight(.semibold)
                     }
+                    .padding(8)
                 }
 
-                // Action footer
+                // Install button
                 HStack {
                     if isRunning {
-                        ProgressView().controlSize(.small)
+                        ProgressView()
+                            .controlSize(.small)
                         Text("Running: \(runningAction)")
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else {
-                        // Summarise what will happen
-                        let toInstall = components.filter { $0.isSelected && !$0.isInstalled }.count
-                        let toUpdate  = components.filter { $0.isSelected && $0.isInstalled }.count
-                        let toSkip    = components.filter { !$0.isSelected && $0.isInstalled }.count
-                        Group {
-                            if toInstall > 0 { Text("\(toInstall) to install").foregroundStyle(.green) }
-                            if toUpdate > 0  { Text("  \(toUpdate) to update").foregroundStyle(.blue) }
-                            if toSkip > 0    { Text("  \(toSkip) installed (uncheck = skip)").foregroundStyle(.secondary) }
-                        }
-                        .font(.caption)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+
                     Spacer()
-                    Button("Apply Changes") { runInstall() }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.cyan)
-                        .disabled(isRunning || !anySelected)
+
+                    Button("Install Selected") {
+                        runInstall()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.cyan)
+                    .disabled(isRunning || !anySelected)
+                }
+
+                // Status
+                GroupBox("System Status") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        StatusRow(label: "Wine",
+                                  isAvailable: backend.status?.wineFound ?? false,
+                                  detail: backend.status?.winePath)
+                        StatusRow(label: "DXVK",
+                                  isAvailable: backend.status?.hasDxvk ?? false)
+                        StatusRow(label: "Mesa",
+                                  isAvailable: backend.status?.hasMesa ?? false)
+                    }
+                    .padding(8)
                 }
             }
             .padding(20)
         }
-        .task { await loadComponentStatus() }
     }
 
     private var anySelected: Bool {
@@ -477,16 +441,14 @@ struct SetupSettingsTab: View {
         }
 
         let prefix = backend.activePrefix ?? home + "/wined"
-        let dxvkSrc      = home + "/DXVK-macOS"
+        let dxvkSrc = home + "/DXVK-macOS"
         let dxvkInstall64 = home + "/dxvk-release"
         let dxvkInstall32 = home + "/dxvk-release-32"
-        let mesaDir       = home + "/mesa/x64"
-        let mesaUrl       = "https://github.com/pal1000/mesa-dist-win/releases/download/23.1.9/mesa3d-23.1.9-release-msvc.7z"
-        let dxmtDir       = home + "/dxmt"
-        let vkd3dDir      = home + "/vkd3d-proton"
+        let mesaDir = home + "/mesa/x64"
+        let mesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/23.1.9/mesa3d-23.1.9-release-msvc.7z"
+        let dxmtDir = home + "/dxmt"
+        let vkd3dDir = home + "/vkd3d-proton"
 
-        // Collect unique installer actions for selected components
-        var seen: Set<String> = []
         var actions: [String] = []
         if installTools { actions.append("install_tools") }
         if installWine { actions.append("install_wine") }
@@ -502,9 +464,11 @@ struct SetupSettingsTab: View {
             return
         }
 
+        // Write a temp shell script to avoid AppleScript escaping issues
         let tmpScript = NSTemporaryDirectory() + "macncheese_install.sh"
         var lines: [String] = [
-            "#!/bin/sh", "set -e",
+            "#!/bin/sh",
+            "set -e",
             "export MNC_SUDOLESS=1",
             "INSTALLER='\(installerPath)'",
             "PREFIX='\(prefix)'",
@@ -514,17 +478,21 @@ struct SetupSettingsTab: View {
             "MESA='\(mesaDir)'",
             "MESA_URL='\(mesaUrl)'",
             "DXMT='\(dxmtDir)'",
-            "VKD3D='\(vkd3dDir)'", "",
+            "VKD3D='\(vkd3dDir)'",
+            "",
         ]
         for action in actions {
             lines.append("echo '=== Running: \(action) ==='")
             lines.append("\"$INSTALLER\" \(action) \"$PREFIX\" \"$DXVK_SRC\" \"$DXVK64\" \"$DXVK32\" \"$MESA\" \"$MESA_URL\" \"$DXMT\" \"\" \"$VKD3D\"")
             lines.append("")
         }
-        lines += ["echo ''", "echo '=== All done! You can close this window. ==='", "read -p 'Press Enter to close...'"]
+        lines.append("echo ''")
+        lines.append("echo '=== All done! You can close this window. ==='")
+        lines.append("read -p 'Press Enter to close...'")
 
         do {
             try lines.joined(separator: "\n").write(toFile: tmpScript, atomically: true, encoding: .utf8)
+            // Make executable
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tmpScript)
         } catch {
             runningAction = "Failed to write install script: \(error.localizedDescription)"
@@ -532,56 +500,24 @@ struct SetupSettingsTab: View {
             return
         }
 
+        // Open in Terminal.app
         let appleScript = "tell application \"Terminal\"\nactivate\ndo script \"\(tmpScript)\"\nend tell"
+
         runningAction = "Running in Terminal..."
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         task.arguments = ["-e", appleScript]
-        try? task.run()
+        do {
+            try task.run()
+        } catch {
+            runningAction = "Failed to open Terminal: \(error.localizedDescription)"
+        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
             isRunning = false
             runningAction = ""
-            Task {
-                await backend.loadStatus()
-                await loadComponentStatus()
-            }
+            Task { await backend.loadStatus() }
         }
-    }
-}
-
-private struct ComponentRow: View {
-    @Binding var component: SetupComponent
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Toggle("", isOn: $component.isSelected)
-                .labelsHidden()
-                .toggleStyle(.checkbox)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(component.label)
-                    .fontWeight(component.tint == .primary ? .regular : .semibold)
-                    .foregroundStyle(component.tint == .primary ? Color.primary : component.tint)
-            }
-
-            Spacer()
-
-            // Status badge
-            if component.isInstalled {
-                Label("Installed", systemImage: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-                    .labelStyle(.titleAndIcon)
-            } else {
-                Label("Not installed", systemImage: "xmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .labelStyle(.titleAndIcon)
-            }
-        }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 8)
     }
 }
 

@@ -8,7 +8,9 @@ final class BackendClient: ObservableObject {
     @Published var games: [Game] = []
     @Published var status: BackendStatus?
     @Published var isConnected = false
-    @Published var activePrefix: String?
+    @Published var activePrefix: String? {
+        didSet { UserDefaults.standard.set(activePrefix, forKey: "lastActivePrefix") }
+    }
     @Published var runningGamePid: Int?
     @Published var lastError: String?
 
@@ -100,9 +102,13 @@ final class BackendClient: ObservableObject {
             if let data = try? JSONSerialization.data(withJSONObject: result),
                let decoded = try? JSONDecoder().decode([Bottle].self, from: data) {
                 self.bottles = decoded
-                // Auto-select first bottle if none selected
-                if activePrefix == nil, let first = decoded.first {
-                    selectBottle(first.path)
+                // Restore last active bottle, fall back to first
+                if activePrefix == nil {
+                    let last = UserDefaults.standard.string(forKey: "lastActivePrefix")
+                    let match = last.flatMap { l in decoded.first { $0.path == l } }
+                    if let bottle = match ?? decoded.first {
+                        selectBottle(bottle.path)
+                    }
                 }
             }
         } catch {
@@ -230,6 +236,15 @@ final class BackendClient: ObservableObject {
             }
         } catch {
             lastError = "Failed to create bottle: \(error.localizedDescription)"
+        }
+    }
+
+    func reorderBottles(paths: [String]) async {
+        bottles = paths.compactMap { p in bottles.first { $0.path == p } }
+        do {
+            _ = try await send(cmd: "reorder_bottles", params: ["paths": paths])
+        } catch {
+            lastError = "Failed to reorder bottles: \(error.localizedDescription)"
         }
     }
 

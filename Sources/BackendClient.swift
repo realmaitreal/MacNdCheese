@@ -154,6 +154,24 @@ final class BackendClient: ObservableObject {
     @Published var steamRunning = false
     private var steamPollTask: Task<Void, Never>?
 
+    func launchLauncher(prefix: String) async {
+        let retinaMode = NSScreen.main.map { $0.backingScaleFactor > 1.0 } ?? false
+        do {
+            let result = try await send(cmd: "launch_launcher", params: [
+                "prefix": prefix, "retina_mode": retinaMode
+            ])
+            if let dict = result as? [String: Any] {
+                steamRunning = true
+                let _ = dict["already_running"] as? Bool ?? false
+            }
+        } catch {
+            lastError = "Failed to launch: \(error.localizedDescription)"
+            return
+        }
+        startSteamPolling()
+        focusWineWindow()
+    }
+
     func launchSteam(prefix: String) async {
         let retinaMode = NSScreen.main.map { $0.backingScaleFactor > 1.0 } ?? false
         do {
@@ -346,6 +364,18 @@ final class BackendClient: ObservableObject {
         } catch {
             lastError = "Failed to list backends: \(error.localizedDescription)"
         }
+        return nil
+    }
+
+    func getExeIcon(exe: String) async -> Data? {
+        do {
+            let result = try await send(cmd: "get_exe_icon", params: ["exe": exe])
+            if let dict = result as? [String: Any],
+               let b64 = dict["icon"] as? String,
+               let data = Data(base64Encoded: b64) {
+                return data
+            }
+        } catch {}
         return nil
     }
 

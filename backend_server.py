@@ -15,11 +15,14 @@ Response: {"id": 1, "ok": true, "data": ...}
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 import os
 import re
 import shlex
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -28,6 +31,7 @@ import time
 import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -73,12 +77,24 @@ SKIP_EXE_TOKENS = (
     "helper", "bootstrap", "diagnostics", "dxwebsetup",
 )
 
+# Centralised log directory (wine logs, dxvk logs, app log)
+LOG_DIR = Path.home() / "Library" / "Logs" / "MacNCheese"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+(LOG_DIR / "dxvk").mkdir(exist_ok=True)
+APP_LOG_PATH = LOG_DIR / "macncheese.log"
+
 # ---------------------------------------------------------------------------
-# Logging helper (always to stderr)
+# Logging helper (stderr + persistent app log file)
 # ---------------------------------------------------------------------------
 
 def log(msg: str) -> None:
     print(f"[backend] {msg}", file=sys.stderr, flush=True)
+    try:
+        with APP_LOG_PATH.open("a") as _f:
+            import datetime
+            _f.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+    except Exception:
+        pass
 
 # ---------------------------------------------------------------------------
 # JSON helpers for config files
@@ -308,8 +324,8 @@ def _apply_backend_env(env: Dict[str, str], backend: str) -> Dict[str, str]:
 
     elif backend == BACKEND_DXVK:
         backend_ovr = "dxgi,d3d11,d3d10core=n,b"
-        dxvk_log_dir = str(Path.home() / "dxvk-logs")
-        Path(dxvk_log_dir).mkdir(parents=True, exist_ok=True)
+        dxvk_log_dir = str(LOG_DIR / "dxvk")
+        
         env["DXVK_LOG_PATH"] = dxvk_log_dir
         env["DXVK_LOG_LEVEL"] = "info"
         env["DXVK_HDR"] = "0"
@@ -390,8 +406,8 @@ def _apply_backend_env(env: Dict[str, str], backend: str) -> Dict[str, str]:
         env["WINEDLLOVERRIDES"] = mandatory_ovr
 
     # DXVK log dir always created (for Steam launch etc.)
-    dxvk_log_dir = str(Path.home() / "dxvk-logs")
-    Path(dxvk_log_dir).mkdir(parents=True, exist_ok=True)
+    dxvk_log_dir = str(LOG_DIR / "dxvk")
+    
     env.setdefault("DXVK_LOG_PATH", dxvk_log_dir)
     env.setdefault("DXVK_LOG_LEVEL", "info")
     env["WINEDEBUG"] = "-all"
@@ -905,7 +921,7 @@ def cmd_launch_game(params: Dict[str, Any]) -> Any:
     exe_name = exe_path.name
 
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", exe_path.stem)
-    log_path = str(Path.home() / f"{safe_name}-wine.log")
+    log_path = str(LOG_DIR / f"{safe_name}-wine.log")
 
     arg_parts = shlex.split(args) if args else []
     quoted_args = " ".join(shlex.quote(a) for a in arg_parts)
@@ -967,7 +983,7 @@ def cmd_launch_steam(params: Dict[str, Any]) -> Any:
         _apply_retina_regedit(wine, env, retina_mode)
         exe_path = Path(launcher_exe)
         safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", exe_path.stem)
-        log_path = str(Path.home() / f"{safe_name}-wine.log")
+        log_path = str(LOG_DIR / f"{safe_name}-wine.log")
         cmd = (
             f"cd {shlex.quote(str(exe_path.parent))} && "
             f"arch -x86_64 {shlex.quote(wine)} "
@@ -1015,7 +1031,7 @@ def cmd_launch_steam(params: Dict[str, Any]) -> Any:
     _apply_retina_regedit(wine, env, retina_mode)
 
     safe_name = "Steam"
-    log_path = str(Path.home() / f"{safe_name}-wine.log")
+    log_path = str(LOG_DIR / f"{safe_name}-wine.log")
 
     cmd = (
         f"cd {shlex.quote(str(steam_dir))} && "
@@ -1073,7 +1089,7 @@ def cmd_launch_launcher(params: Dict[str, Any]) -> Any:
 
     exe_path = Path(launcher_exe)
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", exe_path.stem)
-    log_path = str(Path.home() / f"{safe_name}-wine.log")
+    log_path = str(LOG_DIR / f"{safe_name}-wine.log")
 
     cmd = (
         f"cd {shlex.quote(str(exe_path.parent))} && "
@@ -1427,9 +1443,19 @@ def cmd_list_backends(params: Dict[str, Any]) -> Any:
     return {"backends": all_backends, "auto_resolved": auto_resolved}
 
 
+def _tool_available(name: str) -> bool:
+    """Check if a CLI tool is available, also searching Homebrew paths."""
+    if shutil.which(name) is not None:
+        return True
+    for prefix in ("/opt/homebrew/bin", "/usr/local/bin"):
+        if Path(prefix, name).exists():
+            return True
+    return False
+
+
 def cmd_get_components_status(params: Dict[str, Any]) -> Any:
     """Return installation status for each setup component."""
-    has_tools = all(shutil.which(t) is not None for t in ("git", "7z", "winetricks"))
+    has_tools = all(_tool_available(t) for t in ("git", "7z", "winetricks"))
     dxvk32_install = Path.home() / "dxvk-release-32"
     has_dxvk32 = (dxvk32_install / "bin" / "d3d11.dll").exists()
     return {
@@ -1442,6 +1468,178 @@ def cmd_get_components_status(params: Dict[str, Any]) -> Any:
         "has_d3dmetal3": _gptk_available(),
         "has_gptk": _gptk_available(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Pure-Python PE icon extractor (zero external dependencies)
+# ---------------------------------------------------------------------------
+
+def _pe_rva_to_offset(data: bytes, rva: int) -> int:
+    """Convert a PE RVA to a file offset by walking the section table."""
+    # PE sig offset is at 0x3C
+    pe_off = struct.unpack_from("<I", data, 0x3C)[0]
+    # COFF header: sig(4) + machine(2) + num_sections(2) + ...
+    num_sections = struct.unpack_from("<H", data, pe_off + 6)[0]
+    opt_size = struct.unpack_from("<H", data, pe_off + 20)[0]
+    # Section table starts right after the optional header
+    sect_off = pe_off + 24 + opt_size
+    for i in range(num_sections):
+        s = sect_off + i * 40
+        virt_addr = struct.unpack_from("<I", data, s + 12)[0]
+        virt_size = struct.unpack_from("<I", data, s + 16)[0]
+        raw_off   = struct.unpack_from("<I", data, s + 20)[0]
+        if virt_addr <= rva < virt_addr + max(virt_size, 1):
+            return raw_off + (rva - virt_addr)
+    raise ValueError(f"RVA 0x{rva:x} not found in any section")
+
+
+def _pe_rsrc_find(data: bytes, rsrc_off: int, target_id: int) -> Optional[int]:
+    """
+    Walk one level of an IMAGE_RESOURCE_DIRECTORY to find an entry by integer ID.
+    Returns the raw OffsetToData value (high bit indicates sub-directory).
+    """
+    named = struct.unpack_from("<H", data, rsrc_off + 12)[0]
+    ided  = struct.unpack_from("<H", data, rsrc_off + 14)[0]
+    for i in range(named + ided):
+        entry_off = rsrc_off + 16 + i * 8
+        name_id = struct.unpack_from("<I", data, entry_off)[0]
+        offset  = struct.unpack_from("<I", data, entry_off + 4)[0]
+        # Skip named entries (high bit set on name_id) — we only match integer IDs
+        if name_id & 0x80000000:
+            continue
+        if name_id == target_id:
+            return offset
+    return None
+
+
+def _pe_extract_ico(exe_path: str) -> Optional[bytes]:
+    """
+    Parse a Windows PE file and extract its primary group icon as ICO bytes.
+    Uses only stdlib (struct, io). Returns None if no icon is found.
+    """
+    RT_ICON       = 3
+    RT_GROUP_ICON = 14
+
+    try:
+        with open(exe_path, "rb") as f:
+            data = f.read()
+
+        # Validate MZ + PE signatures
+        if data[:2] != b"MZ":
+            return None
+        pe_off = struct.unpack_from("<I", data, 0x3C)[0]
+        if data[pe_off:pe_off+4] != b"PE\x00\x00":
+            return None
+
+        # Optional header magic: 0x10B = PE32, 0x20B = PE32+
+        opt_magic = struct.unpack_from("<H", data, pe_off + 24)[0]
+        # DataDirectory starts at byte 96 in PE32 optional header, 112 in PE32+
+        dd_off = pe_off + 24 + (112 if opt_magic == 0x20B else 96)
+        rsrc_rva = struct.unpack_from("<I", data, dd_off + 2 * 8)[0]  # entry [2] = resources
+        if rsrc_rva == 0:
+            return None
+
+        rsrc_base = _pe_rva_to_offset(data, rsrc_rva)
+
+        # Level 1: find RT_GROUP_ICON and RT_ICON type directories
+        grp_ptr = _pe_rsrc_find(data, rsrc_base, RT_GROUP_ICON)
+        ico_ptr = _pe_rsrc_find(data, rsrc_base, RT_ICON)
+        if grp_ptr is None or ico_ptr is None:
+            return None
+
+        # Both should be sub-directories (high bit set)
+        grp_dir = rsrc_base + (grp_ptr & 0x7FFFFFFF)
+        ico_dir = rsrc_base + (ico_ptr & 0x7FFFFFFF)
+
+        # Level 2 for RT_ICON: build map of icon_id → data entry offset
+        ico_named = struct.unpack_from("<H", data, ico_dir + 12)[0]
+        ico_ided  = struct.unpack_from("<H", data, ico_dir + 14)[0]
+        icons_by_id: Dict[int, int] = {}
+        for i in range(ico_named + ico_ided):
+            e = ico_dir + 16 + i * 8
+            icon_id  = struct.unpack_from("<I", data, e)[0]
+            sub_ptr  = struct.unpack_from("<I", data, e + 4)[0]
+            if icon_id & 0x80000000:
+                continue  # skip named
+            # Level 3: language sub-directory → first entry → data entry
+            lang_dir = rsrc_base + (sub_ptr & 0x7FFFFFFF)
+            lang_ptr = struct.unpack_from("<I", data, lang_dir + 16 + 4)[0]
+            data_entry_off = rsrc_base + (lang_ptr & 0x7FFFFFFF)
+            icons_by_id[icon_id] = data_entry_off
+
+        # Level 2 for RT_GROUP_ICON: first group entry
+        grp_named = struct.unpack_from("<H", data, grp_dir + 12)[0]
+        grp_ided  = struct.unpack_from("<H", data, grp_dir + 14)[0]
+        if grp_named + grp_ided == 0:
+            return None
+        first_grp_e = grp_dir + 16  # first entry (we take index 0)
+        grp_sub_ptr = struct.unpack_from("<I", data, first_grp_e + 4)[0]
+        # Level 3: language sub-directory → data entry
+        glang_dir = rsrc_base + (grp_sub_ptr & 0x7FFFFFFF)
+        glang_ptr = struct.unpack_from("<I", data, glang_dir + 16 + 4)[0]
+        gdata_entry_off = rsrc_base + (glang_ptr & 0x7FFFFFFF)
+        grp_rva  = struct.unpack_from("<I", data, gdata_entry_off)[0]
+        grp_size = struct.unpack_from("<I", data, gdata_entry_off + 4)[0]
+        grp_file_off = _pe_rva_to_offset(data, grp_rva)
+        grp_data = data[grp_file_off: grp_file_off + grp_size]
+
+        # Parse GRPICONDIR + GRPICONDIRENTRY structs
+        count = struct.unpack_from("<HHH", grp_data, 0)[2]
+        GRPICONDIRENTRY_SIZE = 14
+        icon_items = []  # (width, height, entry_bytes_12, icon_raw_data)
+        for i in range(count):
+            off = 6 + i * GRPICONDIRENTRY_SIZE
+            entry = grp_data[off: off + GRPICONDIRENTRY_SIZE]
+            width  = entry[0] or 256
+            height = entry[1] or 256
+            icon_id = struct.unpack_from("<H", entry, 12)[0]
+            if icon_id not in icons_by_id:
+                continue
+            de = icons_by_id[icon_id]
+            ico_rva  = struct.unpack_from("<I", data, de)[0]
+            ico_size = struct.unpack_from("<I", data, de + 4)[0]
+            ico_file_off = _pe_rva_to_offset(data, ico_rva)
+            icon_raw = data[ico_file_off: ico_file_off + ico_size]
+            icon_items.append((width, height, bytes(entry[:12]), icon_raw))
+
+        if not icon_items:
+            return None
+
+        # Sort largest first, then build the .ico file
+        icon_items.sort(key=lambda x: x[0], reverse=True)
+        n = len(icon_items)
+        buf = io.BytesIO()
+        buf.write(struct.pack("<HHH", 0, 1, n))  # ICONDIR
+        data_offset = 6 + n * 16
+        for _, _, entry12, raw in icon_items:
+            # ICONDIRENTRY = 12 bytes (width..BytesInRes from GRPICONDIRENTRY) + 4-byte ImageOffset
+            buf.write(entry12)
+            buf.write(struct.pack("<I", data_offset))
+            data_offset += len(raw)
+        for _, _, _, raw in icon_items:
+            buf.write(raw)
+        return buf.getvalue()
+
+    except Exception as exc:
+        log(f"_pe_extract_ico error ({type(exc).__name__}): {exc}")
+        return None
+
+
+def cmd_get_exe_icon(params: Dict[str, Any]) -> Any:
+    """Extract the primary icon from a Windows PE executable and return it as base64 ICO."""
+    exe_path = params.get("exe", "")
+    log(f"get_exe_icon: exe={exe_path!r}")
+    if not exe_path or not Path(exe_path).exists():
+        log("get_exe_icon: file not found")
+        return {"icon": None}
+
+    ico_bytes = _pe_extract_ico(exe_path)
+    if ico_bytes:
+        log(f"get_exe_icon: returning {len(ico_bytes)} bytes")
+        return {"icon": base64.b64encode(ico_bytes).decode(), "format": "ico"}
+
+    log("get_exe_icon: no icon found")
+    return {"icon": None}
 
 
 def cmd_get_running_games(params: Dict[str, Any]) -> Any:
@@ -1494,6 +1692,8 @@ COMMANDS: Dict[str, Any] = {
     "get_steam_running": cmd_get_steam_running,
     "get_setup_pid": cmd_get_setup_pid,
     "reorder_bottles": cmd_reorder_bottles,
+    "launch_launcher": cmd_launch_launcher,
+    "get_exe_icon": cmd_get_exe_icon,
 }
 
 # ---------------------------------------------------------------------------

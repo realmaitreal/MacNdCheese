@@ -24,27 +24,42 @@ struct GameGridView: View {
 
                 Spacer()
 
-                if activeBottle?.isSteamBottle ?? true {
-                    Button {
-                        guard let prefix = backend.activePrefix else { return }
-                        if backend.steamRunning {
-                            Task {
-                                await backend.killWineserver(prefix: prefix)
-                                backend.steamRunning = false
+                if let bottle = activeBottle {
+                    let hasCustomExe = !(bottle.launcherExe ?? "").isEmpty
+                    let launcherName: String = {
+                        if let exe = bottle.launcherExe, !exe.isEmpty {
+                            return URL(fileURLWithPath: exe).deletingPathExtension().lastPathComponent
+                        }
+                        return bottle.isSteamBottle ? "Steam" : "Launcher"
+                    }()
+                    if bottle.isSteamBottle || hasCustomExe {
+                        Button {
+                            guard let prefix = backend.activePrefix else { return }
+                            if backend.steamRunning {
+                                Task {
+                                    await backend.killWineserver(prefix: prefix)
+                                    backend.steamRunning = false
+                                }
+                            } else {
+                                Task {
+                                    if bottle.isSteamBottle {
+                                        await backend.launchSteam(prefix: prefix)
+                                    } else {
+                                        await backend.launchLauncher(prefix: prefix)
+                                    }
+                                }
                             }
-                        } else {
-                            Task { await backend.launchSteam(prefix: prefix) }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: backend.steamRunning ? "stop.fill" : "play.fill")
+                                    .font(.caption)
+                                Text(backend.steamRunning ? "Close \(launcherName)" : "Open \(launcherName)")
+                            }
                         }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: backend.steamRunning ? "stop.fill" : "play.fill")
-                                .font(.caption)
-                            Text(backend.steamRunning ? "Close Steam" : "Open Steam")
-                        }
+                        .buttonStyle(.bordered)
+                        .tint(backend.steamRunning ? .red : .cyan)
+                        .disabled(backend.activePrefix == nil)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(backend.steamRunning ? .red : .cyan)
-                    .disabled(backend.activePrefix == nil)
                 }
 
                 HStack(spacing: 4) {

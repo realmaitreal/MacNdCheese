@@ -64,6 +64,16 @@ struct SteamLandingView: View {
     @EnvironmentObject var backend: BackendClient
     @State private var isLaunching = false
 
+    private var activeBottle: Bottle? {
+        guard let prefix = backend.activePrefix else { return nil }
+        return backend.bottles.first { $0.path == prefix }
+    }
+
+    private var customExeName: String? {
+        guard let exe = activeBottle?.launcherExe, !exe.isEmpty else { return nil }
+        return URL(fileURLWithPath: exe).deletingPathExtension().lastPathComponent
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
@@ -74,7 +84,7 @@ struct SteamLandingView: View {
                 .foregroundStyle(.cyan.opacity(0.8))
                 .padding(.bottom, 8)
 
-            Text("STEAM")
+            Text(customExeName?.uppercased() ?? "STEAM")
                 .font(.system(size: 48, weight: .bold, design: .default))
                 .tracking(4)
                 .foregroundStyle(.primary)
@@ -104,7 +114,7 @@ struct SteamLandingView: View {
                     } else {
                         Image(systemName: backend.steamRunning ? "stop.fill" : "play.fill")
                     }
-                    Text(backend.steamRunning ? "Close Steam" : "Launch")
+                    Text(backend.steamRunning ? "Close \(customExeName ?? "Steam")" : "Launch")
                         .fontWeight(.bold)
                 }
                 .frame(width: 160, height: 44)
@@ -175,6 +185,21 @@ struct NoPrefixView: View {
 
 struct EmptyBottleLandingView: View {
     @EnvironmentObject var backend: BackendClient
+    @State private var isLaunching = false
+
+    private var activeBottle: Bottle? {
+        guard let prefix = backend.activePrefix else { return nil }
+        return backend.bottles.first { $0.path == prefix }
+    }
+
+    private var launcherExe: String? {
+        guard let exe = activeBottle?.launcherExe, !exe.isEmpty else { return nil }
+        return exe
+    }
+
+    private var launcherName: String {
+        launcherExe.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent } ?? "Launcher"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -190,6 +215,39 @@ struct EmptyBottleLandingView: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
             Spacer().frame(height: 28)
+            if launcherExe != nil {
+                Button {
+                    guard let prefix = backend.activePrefix else { return }
+                    if backend.steamRunning {
+                        Task {
+                            await backend.killWineserver(prefix: prefix)
+                            backend.steamRunning = false
+                        }
+                    } else {
+                        isLaunching = true
+                        Task {
+                            await backend.launchLauncher(prefix: prefix)
+                            isLaunching = false
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if isLaunching {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: backend.steamRunning ? "stop.fill" : "play.fill")
+                        }
+                        Text(backend.steamRunning ? "Close \(launcherName)" : "Launch \(launcherName)")
+                            .fontWeight(.bold)
+                    }
+                    .frame(minWidth: 160)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(backend.steamRunning ? .red : .cyan)
+                .controlSize(.large)
+                .disabled(isLaunching)
+                Spacer().frame(height: 20)
+            }
             HStack(spacing: 12) {
                 Button("Run Installer") {
                     let panel = NSOpenPanel()

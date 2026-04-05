@@ -66,7 +66,9 @@ struct SidebarView: View {
 }
 
 struct BottleRow: View {
+    @EnvironmentObject var backend: BackendClient
     let bottle: Bottle
+    @State private var exeIcon: NSImage?
 
     var body: some View {
         Label {
@@ -79,7 +81,13 @@ struct BottleRow: View {
                     .lineLimit(1)
             }
         } icon: {
-            if bottle.isSteamBottle {
+            if let icon = exeIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 22, height: 22)
+                    .cornerRadius(4)
+            } else if bottle.isSteamBottle {
                 Image(systemName: "play.square.stack.fill")
                     .foregroundStyle(.blue)
             } else {
@@ -88,6 +96,38 @@ struct BottleRow: View {
             }
         }
         .padding(.vertical, 2)
+        .onAppear { Task { await loadIcon() } }
+    }
+
+    private func loadIcon() async {
+        // 1. Custom icon PNG
+        if let iconPath = bottle.iconPath, !iconPath.isEmpty,
+           FileManager.default.fileExists(atPath: iconPath),
+           let img = NSImage(contentsOfFile: iconPath) {
+            exeIcon = img
+            return
+        }
+
+        // 2. Determine exe to extract icon from
+        let exePath: String
+        if let exe = bottle.launcherExe, !exe.isEmpty {
+            exePath = exe
+        } else if bottle.isSteamBottle {
+            exePath = bottle.path + "/drive_c/Program Files (x86)/Steam/Steam.exe"
+        } else {
+            return
+        }
+        guard FileManager.default.fileExists(atPath: exePath) else { return }
+
+        // 3. Ask backend to extract Windows icon from the PE
+        if let icoData = await backend.getExeIcon(exe: exePath),
+           let img = NSImage(data: icoData) {
+            exeIcon = img
+            return
+        }
+
+        // 4. Fallback: macOS file icon
+        exeIcon = NSWorkspace.shared.icon(forFile: exePath)
     }
 
     private func abbreviatePath(_ path: String) -> String {

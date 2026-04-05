@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Communicates with the Python backend_server.py via JSON over stdin/stdout.
@@ -123,15 +124,17 @@ final class BackendClient: ObservableObject {
 
     func selectBottle(_ path: String) {
         activePrefix = path
+        games = []  // clear immediately so stale games don't show for the new bottle
         Task {
             await scanGames(prefix: path)
         }
     }
 
-    func launchGame(prefix: String, exe: String, args: String = "", backend: String = "auto", installDir: String = "") async {
+    func launchGame(prefix: String, exe: String, args: String = "", backend: String = "auto", installDir: String = "", retinaMode: Bool = false) async {
         do {
             let result = try await send(cmd: "launch_game", params: [
-                "prefix": prefix, "exe": exe, "args": args, "backend": backend, "install_dir": installDir
+                "prefix": prefix, "exe": exe, "args": args, "backend": backend, "install_dir": installDir,
+                "retina_mode": retinaMode
             ])
             if let data = try? JSONSerialization.data(withJSONObject: result),
                let decoded = try? JSONDecoder().decode(LaunchResult.self, from: data) {
@@ -143,28 +146,88 @@ final class BackendClient: ObservableObject {
     }
 
     @Published var steamRunning = false
+    private var steamPollTask: Task<Void, Never>?
 
     func launchSteam(prefix: String) async {
+        let retinaMode = NSScreen.main.map { $0.backingScaleFactor > 1.0 } ?? false
         do {
-            let result = try await send(cmd: "launch_steam", params: ["prefix": prefix])
+            let result = try await send(cmd: "launch_steam", params: [
+                "prefix": prefix, "retina_mode": retinaMode
+            ])
             if let dict = result as? [String: Any] {
-                let alreadyRunning = dict["already_running"] as? Bool ?? false
                 steamRunning = true
-                if alreadyRunning {
-                    lastError = nil // not an error, just info
-                }
+                let _ = dict["already_running"] as? Bool ?? false
             }
         } catch {
             lastError = "Failed to launch Steam: \(error.localizedDescription)"
+            return
+        }
+        startSteamPolling()
+        focusWineWindow()
+    }
+
+    func startSteamPolling() {
+        steamPollTask?.cancel()
+        steamPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard !Task.isCancelled, let self else { break }
+                do {
+                    let result = try await self.send(cmd: "get_steam_running")
+                    if let dict = result as? [String: Any] {
+                        let running = dict["running"] as? Bool ?? false
+                        self.steamRunning = running
+                        if !running { break }
+                    }
+                } catch {
+                    break
+                }
+            }
         }
     }
 
-    func createBottle(name: String, path: String? = nil) async {
+    private func focusWineWindow() {
+        Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            for app in NSWorkspace.shared.runningApplications {
+                let exe = app.executableURL?.lastPathComponent ?? ""
+                if exe.lowercased().contains("wine") {
+                    app.activate()
+                    break
+                }
+            }
+        }
+    }
+
+    private func pollAndFocusSetup() {
+        Task {
+            for _ in 0..<20 {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                do {
+                    let result = try await send(cmd: "get_setup_pid")
+                    if let dict = result as? [String: Any],
+                       let running = dict["running"] as? Bool, running {
+                        focusWineWindow()
+                        return
+                    }
+                } catch { return }
+            }
+        }
+    }
+
+    func createBottle(name: String, path: String? = nil, launcherType: String = "steam", defaultBackend: String = "auto") async {
         do {
-            var params: [String: Any] = ["name": name]
+            var params: [String: Any] = [
+                "name": name,
+                "launcher_type": launcherType,
+                "default_backend": defaultBackend,
+            ]
             if let path = path { params["path"] = path }
             _ = try await send(cmd: "create_bottle", params: params)
             await loadBottles()
+            if launcherType == "steam" {
+                pollAndFocusSetup()
+            }
         } catch {
             lastError = "Failed to create bottle: \(error.localizedDescription)"
         }
@@ -243,6 +306,19 @@ final class BackendClient: ObservableObject {
         } catch {
             lastError = "Failed to add game: \(error.localizedDescription)"
         }
+    }
+
+    func getComponentsStatus() async -> ComponentsStatus? {
+        do {
+            let result = try await send(cmd: "get_components_status")
+            if let data = try? JSONSerialization.data(withJSONObject: result),
+               let decoded = try? JSONDecoder().decode(ComponentsStatus.self, from: data) {
+                return decoded
+            }
+        } catch {
+            lastError = "Failed to get components status: \(error.localizedDescription)"
+        }
+        return nil
     }
 
     func listBackends() async -> BackendsResponse? {

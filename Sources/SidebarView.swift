@@ -74,8 +74,13 @@ struct BottleRow: View {
                     .lineLimit(1)
             }
         } icon: {
-            Image(systemName: "wineglass")
-                .foregroundStyle(.cyan)
+            if bottle.isSteamBottle {
+                Image(systemName: "play.square.stack.fill")
+                    .foregroundStyle(.blue)
+            } else {
+                Image(systemName: "wineglass")
+                    .foregroundStyle(.cyan)
+            }
         }
         .padding(.vertical, 2)
     }

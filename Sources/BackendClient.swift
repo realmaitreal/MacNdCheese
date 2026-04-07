@@ -136,12 +136,32 @@ final class BackendClient: ObservableObject {
         }
     }
 
-    func launchGame(prefix: String, exe: String, args: String = "", backend: String = "auto", installDir: String = "", retinaMode: Bool = false) async {
+    func launchGame(
+        prefix: String,
+        exe: String,
+        args: String = "",
+        backend: String = "auto",
+        installDir: String = "",
+        retinaMode: Bool = false,
+        esync: Bool? = nil,
+        msync: Bool? = nil
+    ) async {
         do {
-            let result = try await send(cmd: "launch_game", params: [
-                "prefix": prefix, "exe": exe, "args": args, "backend": backend, "install_dir": installDir,
-                "retina_mode": retinaMode
-            ])
+            var params: [String: Any] = [
+                "prefix": prefix,
+                "exe": exe,
+                "args": args,
+                "backend": backend,
+                "install_dir": installDir,
+                "retina_mode": retinaMode,
+            ]
+            if let esync {
+                params["esync"] = esync
+            }
+            if let msync {
+                params["msync"] = msync
+            }
+            let result = try await send(cmd: "launch_game", params: params)
             if let data = try? JSONSerialization.data(withJSONObject: result),
                let decoded = try? JSONDecoder().decode(LaunchResult.self, from: data) {
                 runningGamePid = decoded.pid

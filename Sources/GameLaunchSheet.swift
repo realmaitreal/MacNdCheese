@@ -16,6 +16,8 @@ struct GameLaunchSheet: View {
     @State private var loadingBackends = true
     @State private var retinaMode: Bool = NSScreen.main.map { $0.backingScaleFactor > 1.0 } ?? false
     @State private var metalHud: Bool = false
+    @State private var enableEsync: Bool = true
+    @State private var enableMsync: Bool = true
 
     private var effectiveExe: String {
         if !selectedExe.isEmpty { return selectedExe }
@@ -23,7 +25,7 @@ struct GameLaunchSheet: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 24) {
+        HStack(alignment: .top, spacing: 20) {
             // Left: Cover art
             ZStack {
                 RoundedRectangle(cornerRadius: 14)
@@ -45,7 +47,7 @@ struct GameLaunchSheet: View {
             .frame(width: 160, height: 240)
 
             // Right: Game info + options
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text(game.name)
                     .font(.title2)
                     .fontWeight(.bold)
@@ -55,7 +57,7 @@ struct GameLaunchSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Spacer().frame(height: 2)
+                Spacer().frame(height: 0)
 
                 // EXE picker
                 VStack(alignment: .leading, spacing: 4) {
@@ -137,6 +139,28 @@ struct GameLaunchSheet: View {
                     Text("Metal HUD")
                         .font(.caption)
                         .fontWeight(.semibold)
+                // Synchronization
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Synchronization:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fontWeight(.semibold)
+
+                    Toggle(isOn: $enableEsync) {
+                        Text("Enable ESync")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+
+                    Toggle(isOn: $enableMsync) {
+                        Text("Enable MSync")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+
+                    Text("These options control Wine synchronization. MSync is macOS-specific and usually should not be combined with ESync.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer()
@@ -172,7 +196,7 @@ struct GameLaunchSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(24)
-        .frame(width: 560, height: 380)
+        .frame(width: 560, height: 460)
         .background(.ultraThinMaterial)
         .task {
             await loadExes()
@@ -199,13 +223,30 @@ struct GameLaunchSheet: View {
         loadingBackends = false
     }
 
+    private func normalizedSyncSelection() -> (esync: Bool, msync: Bool) {
+        if enableMsync {
+            return (false, true)
+        }
+        return (enableEsync, false)
+    }
+
     private func launchGame() {
         guard let prefix = backend.activePrefix else { return }
         let exe = effectiveExe
         guard !exe.isEmpty else { return }
         isLaunching = true
+        let sync = normalizedSyncSelection()
         Task {
-            await backend.launchGame(prefix: prefix, exe: exe, args: extraArgs, backend: selectedBackend, installDir: game.installDir, retinaMode: retinaMode, metalHud: metalHud)
+            await backend.launchGame(
+                prefix: prefix,
+                exe: exe,
+                args: extraArgs,
+                backend: selectedBackend,
+                installDir: game.installDir,
+                retinaMode: retinaMode,
+                esync: sync.esync,
+                msync: sync.msync
+            )
             isLaunching = false
             dismiss()
         }

@@ -9,7 +9,6 @@ struct Bottle: Identifiable, Codable, Hashable {
     var launcherType: String?   // "steam", "custom"; nil treated as "steam" for compat
     var defaultBackend: String? // "auto", "dxvk", etc.
     var wineBinary: String?     // "auto", "stable", "staging"
-    var discordRpc: Bool?
 
     /// True when this bottle uses Steam as its launcher.
     var isSteamBottle: Bool {
@@ -24,7 +23,6 @@ struct Bottle: Identifiable, Codable, Hashable {
         case launcherType = "launcher_type"
         case defaultBackend = "default_backend"
         case wineBinary = "wine_binary"
-        case discordRpc = "discord_rpc"
     }
 }
 
@@ -107,7 +105,6 @@ struct ComponentsStatus: Codable {
     let hasD3dMetal3: Bool
     let hasVkd3d: Bool
     let wineVersion: String?
-    let hasRpcBridge: Bool
 
     enum CodingKeys: String, CodingKey {
         case hasTools = "has_tools"
@@ -122,7 +119,6 @@ struct ComponentsStatus: Codable {
         case hasD3dMetal3 = "has_d3dmetal3"
         case hasVkd3d = "has_vkd3d"
         case wineVersion = "wine_version"
-        case hasRpcBridge = "has_rpc_bridge"
     }
 }
 

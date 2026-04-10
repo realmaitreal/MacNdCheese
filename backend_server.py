@@ -51,6 +51,7 @@ DEFAULT_PREFIX = str(Path.home() / "wined")
 
 PREFIXES_JSON = Path.home() / ".macncheese_prefixes.json"
 BOTTLES_JSON = Path.home() / ".macncheese_bottles.json"
+GAME_CONFIGS_JSON = Path.home() / ".macncheese_game_configs.json"
 
 STEAM_SETUP_URL = "https://cdn.fastly.steamstatic.com/client/installer/SteamSetup.exe"
 
@@ -207,6 +208,17 @@ def _load_bottles() -> Dict[str, Any]:
 def _save_bottles(bottles: Dict[str, Any]) -> None:
     _write_json(BOTTLES_JSON, bottles)
 
+
+def _load_game_configs() -> Dict[str, Any]:
+    data = _read_json(GAME_CONFIGS_JSON, {})
+    return data if isinstance(data, dict) else {}
+
+def _save_game_configs(configs: Dict[str, Any]) -> None:
+    _write_json(GAME_CONFIGS_JSON, configs)
+
+def _game_config_key(prefix: str, appid: str) -> str:
+    return f"{_resolve_key(prefix)}:{appid}"
+
 def _resolve_key(path: str) -> str:
     try:
         return str(Path(path).expanduser().resolve())
@@ -317,6 +329,9 @@ def _wine_env(prefix: str) -> Dict[str, str]:
     env = dict(os.environ)
     env["WINEPREFIX"] = prefix
     env["WINEDEBUG"] = "-all"
+    # On Apple Silicon, advertise AVX support to Rosetta so games that check
+    # for AVX don't refuse to launch. No effect on Intel Macs.
+    env["ROSETTA_ADVERTISE_AVX"] = "1"
 
     portable_bin = str(PORTABLE_DIR / "bin")
     path = env.get("PATH", "")
@@ -371,6 +386,19 @@ def _apply_sync_env(env: Dict[str, str], esync: Optional[bool], msync: Optional[
         env["WINEESYNC"] = "1" if esync else "0"
     if msync is not None:
         env["WINEMSYNC"] = "1" if msync else "0"
+    return env
+
+
+def _apply_custom_env(env: Dict[str, str], custom_env_str: str) -> Dict[str, str]:
+    """Apply per-bottle custom env vars from a KEY=value newline-separated string."""
+    env = dict(env)
+    for line in custom_env_str.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key, _, val = line.partition("=")
+            env[key.strip()] = val.strip()
     return env
 
 
@@ -1187,7 +1215,14 @@ def cmd_scan_games(params: Dict[str, Any]) -> Any:
         if g["appid"] not in seen_ids:
             seen_ids.add(g["appid"])
             deduped.append(g)
-    deduped.sort(key=lambda g: g["name"].lower())
+
+    # Apply saved game order; unknown/new games fall to end sorted by name
+    game_order: List[str] = bottle.get("game_order", [])
+    if game_order:
+        order_map = {appid: i for i, appid in enumerate(game_order)}
+        deduped.sort(key=lambda g: (order_map.get(g["appid"], len(game_order)), g["name"].lower()))
+    else:
+        deduped.sort(key=lambda g: g["name"].lower())
     return deduped
 
 
@@ -1266,6 +1301,10 @@ def cmd_launch_game(params: Dict[str, Any]) -> Any:
     env = _wine_env(prefix)
     env = _apply_backend_env(env, backend)
     env = _apply_sync_env(env, esync, msync)
+
+    custom_env_str = params.get("custom_env", "")
+    if custom_env_str:
+        env = _apply_custom_env(env, custom_env_str)
 
     if metal_hud:
         env["MTL_HUD_ENABLED"] = "1"
@@ -1685,6 +1724,48 @@ def cmd_set_bottle_config(params: Dict[str, Any]) -> Any:
 
     bottles[key] = existing
     _save_bottles(bottles)
+    return existing
+
+
+def cmd_set_game_order(params: Dict[str, Any]) -> Any:
+    prefix = params.get("prefix")
+    order = params.get("order")
+    if not prefix:
+        raise ValueError("Missing 'prefix'")
+    if not isinstance(order, list):
+        raise ValueError("'order' must be a list")
+    key = _resolve_key(prefix)
+    bottles = _load_bottles()
+    existing = bottles.get(key, {})
+    existing["game_order"] = [str(x) for x in order]
+    bottles[key] = existing
+    _save_bottles(bottles)
+    return {"ok": True}
+
+
+def cmd_get_game_config(params: Dict[str, Any]) -> Any:
+    prefix = params.get("prefix")
+    appid = params.get("appid")
+    if not prefix or not appid:
+        raise ValueError("Missing 'prefix' or 'appid' parameter")
+    configs = _load_game_configs()
+    return configs.get(_game_config_key(prefix, appid), {})
+
+
+def cmd_set_game_config(params: Dict[str, Any]) -> Any:
+    prefix = params.get("prefix")
+    appid = params.get("appid")
+    if not prefix or not appid:
+        raise ValueError("Missing 'prefix' or 'appid' parameter")
+    configs = _load_game_configs()
+    key = _game_config_key(prefix, appid)
+    existing = configs.get(key, {})
+    skip_keys = {"prefix", "appid", "cmd", "id"}
+    for k, v in params.items():
+        if k not in skip_keys:
+            existing[k] = v
+    configs[key] = existing
+    _save_game_configs(configs)
     return existing
 
 
@@ -2283,6 +2364,9 @@ COMMANDS: Dict[str, Any] = {
     "delete_bottle": cmd_delete_bottle,
     "get_bottle_config": cmd_get_bottle_config,
     "set_bottle_config": cmd_set_bottle_config,
+    "set_game_order": cmd_set_game_order,
+    "get_game_config": cmd_get_game_config,
+    "set_game_config": cmd_set_game_config,
     "kill_wineserver": cmd_kill_wineserver,
     "init_prefix": cmd_init_prefix,
     "clean_prefix": cmd_clean_prefix,

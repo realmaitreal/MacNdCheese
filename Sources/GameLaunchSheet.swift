@@ -18,6 +18,7 @@ struct GameLaunchSheet: View {
     @State private var metalHud: Bool = false
     @State private var enableEsync: Bool = true
     @State private var enableMsync: Bool = true
+    @State private var customEnv: String = ""
 
     private var effectiveExe: String {
         if !selectedExe.isEmpty { return selectedExe }
@@ -47,141 +48,173 @@ struct GameLaunchSheet: View {
             .frame(width: 160, height: 240)
 
             // Right: Game info + options
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(game.name)
                     .font(.title2)
                     .fontWeight(.bold)
                     .lineLimit(2)
+                    .padding(.bottom, 2)
 
                 Text("App ID: \(game.appid)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .padding(.bottom, 8)
 
-                Spacer().frame(height: 0)
+                // Scrollable options
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        // EXE picker
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("EXE:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fontWeight(.semibold)
 
-                // EXE picker
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("EXE:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fontWeight(.semibold)
-
-                    if loadingExes {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("Scanning...").font(.caption).foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Picker("", selection: $selectedExe) {
-                            Text("Auto-detect").tag("")
-                            ForEach(detectedExes, id: \.self) { exe in
-                                Text(abbreviateExe(exe))
-                                    .tag(exe)
-                            }
-                        }
-                        .labelsHidden()
-
-                        HStack {
-                            Button("Browse...") { browseExe() }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                        }
-                    }
-                }
-
-                // Graphics engine picker
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Graphics Engine:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fontWeight(.semibold)
-
-                    if loadingBackends {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("Detecting...").font(.caption).foregroundStyle(.secondary)
-                        }
-                    } else {
-                        let mainIds: [String] = ["auto", "dxmt", "d3dmetal3", "dxvk", "vkd3d-proton"]
-                        let experimentalIds: [String] = ["wine", "mesa:llvmpipe", "mesa:zink", "mesa:swr", "gptk", "gptk_full"]
-                        let mainBackends = availableBackends.filter { mainIds.contains($0.backendId) }
-                            .sorted { mainIds.firstIndex(of: $0.backendId) ?? 99 < mainIds.firstIndex(of: $1.backendId) ?? 99 }
-                        let experimentalBackends = availableBackends.filter { experimentalIds.contains($0.backendId) }
-                            .sorted { experimentalIds.firstIndex(of: $0.backendId) ?? 99 < experimentalIds.firstIndex(of: $1.backendId) ?? 99 }
-
-                        Picker("", selection: $selectedBackend) {
-                            ForEach(mainBackends) { b in
-                                Text(engineLabel(b))
-                                    .tag(b.backendId)
-                            }
-                            if !experimentalBackends.isEmpty {
-                                Divider()
-                                Text("— Experimental —").tag("__sep__").disabled(true)
-                                ForEach(experimentalBackends) { b in
-                                    Text(engineLabel(b))
-                                        .tag(b.backendId)
+                            if loadingExes {
+                                HStack(spacing: 6) {
+                                    ProgressView().controlSize(.small)
+                                    Text("Scanning...").font(.caption).foregroundStyle(.secondary)
                                 }
+                            } else {
+                                Picker("", selection: $selectedExe) {
+                                    Text("Auto-detect").tag("")
+                                    ForEach(detectedExes, id: \.self) { exe in
+                                        Text(abbreviateExe(exe))
+                                            .tag(exe)
+                                    }
+                                }
+                                .labelsHidden()
+
+                                Button("Browse...") { browseExe() }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
                             }
                         }
-                        .labelsHidden()
+
+                        // Graphics engine picker
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Graphics Engine:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fontWeight(.semibold)
+
+                            if loadingBackends {
+                                HStack(spacing: 6) {
+                                    ProgressView().controlSize(.small)
+                                    Text("Detecting...").font(.caption).foregroundStyle(.secondary)
+                                }
+                            } else {
+                                let mainIds: [String] = ["auto", "dxmt", "d3dmetal3", "dxvk", "vkd3d-proton"]
+                                let experimentalIds: [String] = ["wine", "mesa:llvmpipe", "mesa:zink", "mesa:swr", "gptk", "gptk_full"]
+                                let mainBackends = availableBackends.filter { mainIds.contains($0.backendId) }
+                                    .sorted { mainIds.firstIndex(of: $0.backendId) ?? 99 < mainIds.firstIndex(of: $1.backendId) ?? 99 }
+                                let experimentalBackends = availableBackends.filter { experimentalIds.contains($0.backendId) }
+                                    .sorted { experimentalIds.firstIndex(of: $0.backendId) ?? 99 < experimentalIds.firstIndex(of: $1.backendId) ?? 99 }
+
+                                Picker("", selection: $selectedBackend) {
+                                    ForEach(mainBackends) { b in
+                                        Text(engineLabel(b))
+                                            .tag(b.backendId)
+                                    }
+                                    if !experimentalBackends.isEmpty {
+                                        Divider()
+                                        Text("— Experimental —").tag("__sep__").disabled(true)
+                                        ForEach(experimentalBackends) { b in
+                                            Text(engineLabel(b))
+                                                .tag(b.backendId)
+                                        }
+                                    }
+                                }
+                                .labelsHidden()
+                            }
+                        }
+
+                        // Args
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Args:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fontWeight(.semibold)
+                            TextField("Optional launch arguments...", text: $extraArgs)
+                                .textFieldStyle(.roundedBorder)
+                        }
+
+                        // Retina mode
+                        VStack(alignment: .leading, spacing: 4) {
+                            Toggle(isOn: $retinaMode) {
+                                Text("Retina hi-res mode")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
+                            Text("Enable high resolution for retina screens. Game compatibility might be affected.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        // Metal HUD
+                        Toggle(isOn: $metalHud) {
+                            Text("Metal HUD")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                        }
+
+                        // Synchronization
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Synchronization:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fontWeight(.semibold)
+
+                            Toggle(isOn: $enableEsync) {
+                                Text("Enable ESync")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
+
+                            Toggle(isOn: $enableMsync) {
+                                Text("Enable MSync")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
+
+                            Text("MSync is macOS-specific and usually should not be combined with ESync.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        // Custom env vars
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Env Vars:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fontWeight(.semibold)
+                            ZStack(alignment: .topLeading) {
+                                if customEnv.isEmpty {
+                                    Text("DXVK_ASYNC=1")
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundStyle(.tertiary)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 8)
+                                        .allowsHitTesting(false)
+                                }
+                                TextEditor(text: $customEnv)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .frame(minHeight: 48, maxHeight: 72)
+                                    .scrollContentBackground(.hidden)
+                                    .background(.fill.tertiary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            Text("KEY=value, one per line. Saved per game.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
+                    .padding(.bottom, 8)
                 }
 
-                // Args
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Args:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fontWeight(.semibold)
-                    TextField("Optional launch arguments...", text: $extraArgs)
-                        .textFieldStyle(.roundedBorder)
-                }
+                Divider().padding(.vertical, 8)
 
-                // Retina mode
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle(isOn: $retinaMode) {
-                        Text("Retina hi-res mode")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                    }
-                    Text("Enable high resolution for retina screens. Game compatibility might be affected.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                // Metal HUD
-                Toggle(isOn: $metalHud) {
-                    Text("Metal HUD")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                }
-                // Synchronization
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Synchronization:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fontWeight(.semibold)
-
-                    Toggle(isOn: $enableEsync) {
-                        Text("Enable ESync")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                    }
-
-                    Toggle(isOn: $enableMsync) {
-                        Text("Enable MSync")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                    }
-
-                    Text("These options control Wine synchronization. MSync is macOS-specific and usually should not be combined with ESync.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                // Buttons
+                // Buttons — always visible, outside the scroll area
                 HStack {
                     Button("Cancel") { dismiss() }
                         .keyboardShortcut(.cancelAction)
@@ -212,13 +245,42 @@ struct GameLaunchSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(24)
-        .frame(width: 560, height: 460)
+        .frame(width: 560, height: 480)
         .background(.ultraThinMaterial)
         .task {
             await loadExes()
             await loadBackends()
             await loadBottleDefaults()
+            await loadGameConfig()
         }
+    }
+
+    private func loadGameConfig() async {
+        guard let prefix = backend.activePrefix else { return }
+        let cfg = await backend.getGameConfig(prefix: prefix, appid: game.appid)
+        if let exe = cfg["exe"] as? String, !exe.isEmpty { selectedExe = exe }
+        if let b = cfg["backend"] as? String { selectedBackend = b }
+        if let a = cfg["args"] as? String { extraArgs = a }
+        if let r = cfg["retina_mode"] as? Bool { retinaMode = r }
+        if let h = cfg["metal_hud"] as? Bool { metalHud = h }
+        if let e = cfg["esync"] as? Bool { enableEsync = e }
+        if let m = cfg["msync"] as? Bool { enableMsync = m }
+        if let env = cfg["custom_env"] as? String { customEnv = env }
+    }
+
+    private func saveGameConfig() async {
+        guard let prefix = backend.activePrefix else { return }
+        let sync = normalizedSyncSelection()
+        await backend.setGameConfig(prefix: prefix, appid: game.appid, values: [
+            "exe": selectedExe,
+            "backend": selectedBackend,
+            "args": extraArgs,
+            "retina_mode": retinaMode,
+            "metal_hud": metalHud,
+            "esync": sync.esync,
+            "msync": sync.msync,
+            "custom_env": customEnv,
+        ])
     }
 
     private func loadExes() async {
@@ -259,6 +321,7 @@ struct GameLaunchSheet: View {
         guard !exe.isEmpty else { return }
         isLaunching = true
         Task {
+            await saveGameConfig()
             let sync = normalizedSyncSelection()
             await backend.launchGame(
                 prefix: prefix,
@@ -269,7 +332,8 @@ struct GameLaunchSheet: View {
                 retinaMode: retinaMode,
                 metalHud: metalHud,
                 esync: sync.esync,
-                msync: sync.msync
+                msync: sync.msync,
+                customEnv: customEnv
             )
             isLaunching = false
             dismiss()

@@ -59,6 +59,7 @@ struct BottleSettingsTab: View {
     @State private var launcherExe = ""
     @State private var iconPath = ""
     @State private var wineBinary = "auto"
+    @State private var metalHud = false
     @State private var isInitializing = false
     @State private var isCleaning = false
 
@@ -115,6 +116,13 @@ struct BottleSettingsTab: View {
                         }
                         .labelsHidden()
                     }
+
+                    // Metal HUD (global for this prefix)
+                    Toggle(isOn: $metalHud) {
+                        Text("Metal HUD")
+                            .font(.body)
+                    }
+                    .onChange(of: metalHud) { saveBottleConfig() }
 
                     Divider()
 
@@ -213,6 +221,11 @@ struct BottleSettingsTab: View {
             launcherExe = bottle.launcherExe ?? ""
             iconPath = bottle.iconPath ?? ""
             wineBinary = bottle.wineBinary ?? "auto"
+            Task {
+                if let config = await backend.getBottleConfig(path: bottle.path) {
+                    metalHud = config["metal_hud"] as? Bool ?? false
+                }
+            }
         }
     }
 
@@ -224,6 +237,7 @@ struct BottleSettingsTab: View {
                 "launcher_exe": launcherExe,
                 "icon_path": iconPath,
                 "wine_binary": wineBinary,
+                "metal_hud": metalHud,
             ])
         }
     }
@@ -337,25 +351,25 @@ struct SetupSettingsTab: View {
     @State private var isRunning = false
     @State private var isLoadingStatus = false
 
-    // Current toggle selections
-    @State private var installTools = false
-    @State private var installWineStable = false
-    @State private var installWineStaging = false
-    @State private var installMesa = false
-    @State private var buildDxvk = false
-    @State private var installVkd3d = false
-    @State private var installD3dMetal = false
-    @State private var installGptkFull = false
+    // Toggle selections — each maps to one installer action
+    @State private var wantTools = false
+    @State private var wantWineStable = false
+    @State private var wantWineStaging = false
+    @State private var wantDxvk = false
+    @State private var wantVkd3d = false
+    @State private var wantGptkDlls = false
+    @State private var wantDxmt = false
+    @State private var wantMesa = false
 
     // Baseline installed state (used to detect installs vs uninstalls)
-    @State private var wasTools = false
-    @State private var wasWineStable = false
-    @State private var wasWineStaging = false
-    @State private var wasMesa = false
-    @State private var wasDxvk = false
-    @State private var wasVkd3d = false
-    @State private var wasD3dMetal = false
-    @State private var wasGptkFull = false
+    @State private var hadTools = false
+    @State private var hadWineStable = false
+    @State private var hadWineStaging = false
+    @State private var hadDxvk = false
+    @State private var hadVkd3d = false
+    @State private var hadGptkDlls = false
+    @State private var hadDxmt = false
+    @State private var hadMesa = false
 
     // Update availability per component
     @State private var toolsHasUpdate = false
@@ -372,7 +386,6 @@ struct SetupSettingsTab: View {
     @State private var installCurrentAction: String = ""
     @State private var installDone: Bool = false
     @State private var installFailed: Bool = false
-    @State private var pollTask: Task<Void, Never>? = nil
 
     var body: some View {
         ScrollView {
@@ -380,24 +393,24 @@ struct SetupSettingsTab: View {
                 GroupBox("Quick Setup") {
                     HStack(spacing: 12) {
                         Button("Minimal") {
-                            installTools = true; installWineStable = true
-                            buildDxvk = true; installMesa = true
+                            wantTools = true; wantWineStable = true
+                            wantDxvk = true; wantMesa = true
                         }
                         .buttonStyle(.bordered)
-                        .help("Select: Tools, Wine Stable, DXVK (64/32), Mesa")
+                        .help("Select: Tools, Wine Stable, DXVK, Mesa")
                         .disabled(isRunning)
                         Button("Everything") {
-                            installTools = true; installWineStable = true; installWineStaging = true
-                            installMesa = true; buildDxvk = true
-                            installVkd3d = true; installD3dMetal = true; installGptkFull = true
+                            wantTools = true; wantWineStable = true; wantWineStaging = true
+                            wantDxvk = true; wantVkd3d = true
+                            wantGptkDlls = true; wantDxmt = true; wantMesa = true
                         }
                         .buttonStyle(.bordered)
                         .help("Select all components")
                         .disabled(isRunning)
                         Button("None") {
-                            installTools = false; installWineStable = false; installWineStaging = false
-                            installMesa = false; buildDxvk = false
-                            installVkd3d = false; installD3dMetal = false; installGptkFull = false
+                            wantTools = false; wantWineStable = false; wantWineStaging = false
+                            wantDxvk = false; wantVkd3d = false
+                            wantGptkDlls = false; wantDxmt = false; wantMesa = false
                         }
                         .buttonStyle(.bordered)
                         .disabled(isRunning)
@@ -407,8 +420,8 @@ struct SetupSettingsTab: View {
 
                 GroupBox("Tools") {
                     VStack(alignment: .leading, spacing: 8) {
-                        ComponentToggleRow("Tools (git, 7z, winetricks)", isOn: $installTools,
-                                          installed: wasTools, updateAvailable: toolsHasUpdate)
+                        ComponentToggleRow("Tools (git, 7z, wget)", isOn: $wantTools,
+                                          installed: hadTools, updateAvailable: toolsHasUpdate)
                             .disabled(isRunning)
                     }
                     .padding(8)
@@ -416,29 +429,29 @@ struct SetupSettingsTab: View {
 
                 GroupBox("Wine (Translation Engine)") {
                     VStack(alignment: .leading, spacing: 8) {
-                        ComponentToggleRow("Wine (Stable)", isOn: $installWineStable,
-                                          installed: wasWineStable, updateAvailable: wineStableHasUpdate)
+                        ComponentToggleRow("Wine (Stable)", isOn: $wantWineStable,
+                                          installed: hadWineStable, updateAvailable: wineStableHasUpdate)
                             .disabled(isRunning)
                         ComponentToggleRow(stagingLatestName.map { "Wine (Staging — \($0))" } ?? "Wine (Staging)",
-                                          isOn: $installWineStaging,
-                                          installed: wasWineStaging, updateAvailable: wineStagingHasUpdate)
+                                          isOn: $wantWineStaging,
+                                          installed: hadWineStaging, updateAvailable: wineStagingHasUpdate)
                             .disabled(isRunning)
                     }
                     .padding(8)
                 }
 
-                GroupBox("Graphics Engine") {
+                GroupBox("Graphics") {
                     VStack(alignment: .leading, spacing: 8) {
                         ComponentToggleRow(dxmtLatestName.map { "DXMT (\($0))" } ?? "DXMT",
-                                          isOn: $installGptkFull, installed: wasGptkFull, updateAvailable: dxmtHasUpdate)
+                                          isOn: $wantDxmt, installed: hadDxmt, updateAvailable: dxmtHasUpdate)
                             .disabled(isRunning)
-                        ComponentToggleRow("DXVK", isOn: $buildDxvk, installed: wasDxvk)
+                        ComponentToggleRow("DXVK", isOn: $wantDxvk, installed: hadDxvk)
                             .disabled(isRunning)
-                        ComponentToggleRow("VKD3D-Proton", isOn: $installVkd3d, installed: wasVkd3d)
+                        ComponentToggleRow("VKD3D-Proton", isOn: $wantVkd3d, installed: hadVkd3d)
                             .disabled(isRunning)
-                        ComponentToggleRow("D3DMetal (GPTK DLLs)", isOn: $installD3dMetal, installed: wasD3dMetal)
+                        ComponentToggleRow("GPTK DLLs (D3DMetal)", isOn: $wantGptkDlls, installed: hadGptkDlls)
                             .disabled(isRunning)
-                        ComponentToggleRow("Mesa", isOn: $installMesa, installed: wasMesa)
+                        ComponentToggleRow("Mesa", isOn: $wantMesa, installed: hadMesa)
                             .disabled(isRunning)
                     }
                     .padding(8)
@@ -456,7 +469,7 @@ struct SetupSettingsTab: View {
                                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                             }
                             Text(isRunning
-                                 ? (installCurrentAction.isEmpty ? "Starting…" : installCurrentAction)
+                                 ? (installCurrentAction.isEmpty ? "Starting..." : installCurrentAction)
                                  : (installFailed ? "Finished with errors" : "Done!"))
                                 .font(.caption)
                                 .foregroundColor(isRunning ? .secondary : (installFailed ? .red : .green))
@@ -489,7 +502,7 @@ struct SetupSettingsTab: View {
                 HStack {
                     if isLoadingStatus {
                         ProgressView().controlSize(.small)
-                        Text("Checking components…")
+                        Text("Checking components...")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -517,18 +530,17 @@ struct SetupSettingsTab: View {
         isLoadingStatus = true
         Task {
             if let status = await backend.getComponentsStatus() {
-                wasTools = status.hasTools;           installTools = status.hasTools
-                wasWineStable = status.hasWineStable; installWineStable = status.hasWineStable
-                wasWineStaging = status.hasWineStaging; installWineStaging = status.hasWineStaging
-                wasMesa = status.hasMesa;             installMesa = status.hasMesa
-                wasDxvk = status.hasDxvk64;           buildDxvk = status.hasDxvk64
-                wasVkd3d = status.hasVkd3d;           installVkd3d = status.hasVkd3d
-                wasD3dMetal = status.hasD3dMetal3;    installD3dMetal = status.hasD3dMetal3
-                wasGptkFull = status.hasGptkFull;     installGptkFull = status.hasGptkFull
+                hadTools = status.hasTools;             wantTools = status.hasTools
+                hadWineStable = status.hasWineStable;   wantWineStable = status.hasWineStable
+                hadWineStaging = status.hasWineStaging; wantWineStaging = status.hasWineStaging
+                hadDxvk = status.hasDxvk64;             wantDxvk = status.hasDxvk64
+                hadVkd3d = status.hasVkd3d;             wantVkd3d = status.hasVkd3d
+                hadGptkDlls = status.hasGptkDlls;       wantGptkDlls = status.hasGptkDlls
+                hadDxmt = status.hasDxmt;               wantDxmt = status.hasDxmt
+                hadMesa = status.hasMesa;               wantMesa = status.hasMesa
             }
             isLoadingStatus = false
 
-            // Check for updates in background (network call)
             if let info = await backend.getUpdateInfo() {
                 toolsHasUpdate = info.toolsUpdateAvailable
                 wineStableHasUpdate = info.wineStableUpdateAvailable
@@ -557,20 +569,21 @@ struct SetupSettingsTab: View {
         let dxmtDir = home + "/dxmt"
         let vkd3dDir = home + "/vkd3d-proton"
 
+        // Plan actions: install if toggled on, uninstall if toggled off but was installed
         var uninstallActions: [String] = []
         var installActions: [String] = []
         func plan(_ on: Bool, _ was: Bool, install: String, uninstall: String) {
             if on { installActions.append(install) }
             else if was { uninstallActions.append(uninstall) }
         }
-        plan(installTools,       wasTools,       install: "install_tools",        uninstall: "uninstall_tools")
-        plan(installWineStable,  wasWineStable,  install: "install_wine",         uninstall: "uninstall_wine")
-        plan(installWineStaging, wasWineStaging, install: "install_wine_staging", uninstall: "uninstall_wine_staging")
-        plan(installMesa,        wasMesa,        install: "install_mesa",         uninstall: "uninstall_mesa")
-        plan(buildDxvk,          wasDxvk,        install: "install_dxvk",         uninstall: "uninstall_dxvk")
-        plan(installVkd3d,       wasVkd3d,       install: "install_vkd3d",        uninstall: "uninstall_vkd3d")
-        plan(installD3dMetal,    wasD3dMetal,    install: "install_gptk_dlls",    uninstall: "uninstall_d3dmetal")
-        plan(installGptkFull,    wasGptkFull,    install: "install_dxmt",         uninstall: "uninstall_dxmt")
+        plan(wantTools,       hadTools,       install: "install_tools",        uninstall: "uninstall_tools")
+        plan(wantWineStable,  hadWineStable,  install: "install_wine",         uninstall: "uninstall_wine")
+        plan(wantWineStaging, hadWineStaging, install: "install_wine_staging", uninstall: "uninstall_wine_staging")
+        plan(wantDxvk,        hadDxvk,        install: "install_dxvk",         uninstall: "uninstall_dxvk")
+        plan(wantVkd3d,       hadVkd3d,       install: "install_vkd3d",        uninstall: "uninstall_vkd3d")
+        plan(wantGptkDlls,    hadGptkDlls,    install: "install_gptk_dlls",    uninstall: "uninstall_gptk_dlls")
+        plan(wantDxmt,        hadDxmt,        install: "install_dxmt",         uninstall: "uninstall_dxmt")
+        plan(wantMesa,        hadMesa,        install: "install_mesa",         uninstall: "uninstall_mesa")
 
         let allActions = uninstallActions + installActions
         guard !allActions.isEmpty else { return }
@@ -596,7 +609,6 @@ struct SetupSettingsTab: View {
             }
 
             installJobId = jobId
-            // Poll every 500ms until done
             while true {
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 guard let progress = await backend.getInstallProgress(jobId: jobId, offset: installLogOffset) else {
@@ -849,4 +861,3 @@ struct ActionButton: View {
         .disabled(isLoading)
     }
 }
-

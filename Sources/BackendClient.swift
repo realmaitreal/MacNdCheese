@@ -137,7 +137,7 @@ final class BackendClient: ObservableObject {
         }
     }
 
-    func launchGame(prefix: String, exe: String, args: String = "", backend: String = "auto", installDir: String = "", retinaMode: Bool = false, metalHud: Bool = false, esync: Bool = true, msync: Bool = true, gameName: String = "", steamAppId: String = "") async {
+    func launchGame(prefix: String, exe: String, args: String = "", backend: String = "auto", installDir: String = "", retinaMode: Bool = false, metalHud: Bool = false, esync: Bool = true, msync: Bool = true, gameName: String = "", steamAppId: String = "", customEnv: String = "") async {
         do {
             let screenInfo = NSScreen.screens.map { s in
                 "\(s.localizedName): scale=\(s.backingScaleFactor) res=\(Int(s.frame.width))x\(Int(s.frame.height))"
@@ -146,6 +146,7 @@ final class BackendClient: ObservableObject {
                 "prefix": prefix, "exe": exe, "args": args, "backend": backend, "install_dir": installDir,
                 "retina_mode": retinaMode, "metal_hud": metalHud, "esync": esync, "msync": msync,
                 "screen_info": screenInfo, "game_name": gameName, "steam_appid": steamAppId,
+                "custom_env": customEnv,
             ])
             if let data = try? JSONSerialization.data(withJSONObject: result),
                let decoded = try? JSONDecoder().decode(LaunchResult.self, from: data) {
@@ -324,8 +325,6 @@ final class BackendClient: ObservableObject {
         }
     }
 
-<<<<<<< discord-rpc
-=======
     func getBottleConfig(path: String) async -> [String: Any]? {
         do {
             let result = try await send(cmd: "get_bottle_config", params: ["path": path])
@@ -336,7 +335,6 @@ final class BackendClient: ObservableObject {
         return nil
     }
 
->>>>>>> main
     func setBottleConfig(path: String, values: [String: Any]) async {
         var params: [String: Any] = ["path": path]
         for (k, v) in values { params[k] = v }
@@ -345,6 +343,33 @@ final class BackendClient: ObservableObject {
             await loadBottles()
         } catch {
             lastError = "Failed to save config: \(error.localizedDescription)"
+        }
+    }
+
+    func setGameOrder(prefix: String, order: [String]) async {
+        do {
+            _ = try await send(cmd: "set_game_order", params: ["prefix": prefix, "order": order])
+        } catch {
+            lastError = "Failed to save game order: \(error.localizedDescription)"
+        }
+    }
+
+    func getGameConfig(prefix: String, appid: String) async -> [String: Any] {
+        do {
+            let result = try await send(cmd: "get_game_config", params: ["prefix": prefix, "appid": appid])
+            return (result as? [String: Any]) ?? [:]
+        } catch {
+            return [:]
+        }
+    }
+
+    func setGameConfig(prefix: String, appid: String, values: [String: Any]) async {
+        var params: [String: Any] = ["prefix": prefix, "appid": appid]
+        for (k, v) in values { params[k] = v }
+        do {
+            _ = try await send(cmd: "set_game_config", params: params)
+        } catch {
+            lastError = "Failed to save game config: \(error.localizedDescription)"
         }
     }
 

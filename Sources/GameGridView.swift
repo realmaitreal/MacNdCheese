@@ -1,9 +1,14 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct GameGridView: View {
     @EnvironmentObject var backend: BackendClient
     let games: [Game]
     @Binding var searchText: String
+
+    @State private var gameOrder: [String] = []
+    @State private var draggingAppid: String? = nil
+    @State private var dropTargetAppid: String? = nil
 
     private var activeBottle: Bottle? {
         guard let prefix = backend.activePrefix else { return nil }
@@ -13,6 +18,23 @@ struct GameGridView: View {
     private let columns = [
         GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 16)
     ]
+
+    /// Games sorted by the user-defined order; new/unknown games go to the end.
+    private var orderedGames: [Game] {
+        if gameOrder.isEmpty { return games }
+        let orderMap = Dictionary(uniqueKeysWithValues: gameOrder.enumerated().map { ($1, $0) })
+        return games.sorted {
+            let ia = orderMap[$0.appid] ?? Int.max
+            let ib = orderMap[$1.appid] ?? Int.max
+            return ia == ib ? $0.name.lowercased() < $1.name.lowercased() : ia < ib
+        }
+    }
+
+    private var displayedGames: [Game] {
+        searchText.isEmpty
+            ? orderedGames
+            : orderedGames.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -78,14 +100,64 @@ struct GameGridView: View {
             // Game grid
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(games) { game in
+                    ForEach(displayedGames) { game in
                         GameCardView(game: game)
+                            .opacity(draggingAppid == game.appid ? 0.45 : 1.0)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(
+                                        dropTargetAppid == game.appid ? Color.cyan : Color.clear,
+                                        lineWidth: 2
+                                    )
+                            )
+                            .onDrag {
+                                draggingAppid = game.appid
+                                return NSItemProvider(object: game.appid as NSString)
+                            }
+                            .onDrop(
+                                of: [UTType.plainText],
+                                isTargeted: Binding(
+                                    get: { dropTargetAppid == game.appid },
+                                    set: { targeted in
+                                        dropTargetAppid = targeted ? game.appid : nil
+                                    }
+                                )
+                            ) { _ in
+                                guard let from = draggingAppid, from != game.appid else {
+                                    draggingAppid = nil; return false
+                                }
+                                moveGame(from: from, before: game.appid)
+                                draggingAppid = nil
+                                return true
+                            }
                     }
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
             }
         }
+        .onAppear { gameOrder = games.map { $0.appid } }
+        .onChange(of: backend.activePrefix) {
+            gameOrder = games.map { $0.appid }
+        }
+        .onChange(of: games) {
+            // Merge new games into the existing order (append unknowns at end)
+            let known = Set(gameOrder)
+            let newIds = games.map { $0.appid }.filter { !known.contains($0) }
+            gameOrder = gameOrder.filter { id in games.contains { $0.appid == id } } + newIds
+        }
+    }
+
+    private func moveGame(from sourceAppid: String, before targetAppid: String) {
+        var order = orderedGames.map { $0.appid }
+        guard let fromIdx = order.firstIndex(of: sourceAppid),
+              let toIdx = order.firstIndex(of: targetAppid) else { return }
+        order.remove(at: fromIdx)
+        let insertIdx = order.firstIndex(of: targetAppid) ?? toIdx
+        order.insert(sourceAppid, at: insertIdx)
+        gameOrder = order
+        guard let prefix = backend.activePrefix else { return }
+        Task { await backend.setGameOrder(prefix: prefix, order: order) }
     }
 }
 
@@ -95,47 +167,61 @@ struct GameCardView: View {
     @State private var isHovering = false
     @State private var showLaunchOptions = false
     @State private var coverImage: NSImage?
+    @State private var isLaunching = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Cover image area
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.ultraThinMaterial)
-                    .frame(height: 220)
-
-                if let image = coverImage {
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
+            // Cover image area — click to launch directly
+            ZStack(alignment: .topTrailing) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(.ultraThinMaterial)
                         .frame(height: 220)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                } else {
-                    VStack(spacing: 8) {
+
+                    if let image = coverImage {
+                        Image(nsImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(height: 220)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    } else {
                         Image(systemName: "gamecontroller.fill")
                             .font(.system(size: 32))
                             .foregroundStyle(.secondary)
                     }
-                }
 
-                // Hover overlay
-                if isHovering {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(.black.opacity(0.6))
-                        .frame(height: 220)
-
-                    VStack(spacing: 10) {
-                        Button {
-                            showLaunchOptions = true
-                        } label: {
-                            Label("Play", systemImage: "play.fill")
-                                .font(.headline)
-                                .frame(minWidth: 100)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.cyan)
-                        .controlSize(.large)
+                    // Hover dim
+                    if isHovering {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.black.opacity(0.35))
+                            .frame(height: 220)
                     }
+
+                    // Launching spinner
+                    if isLaunching {
+                        ProgressView()
+                            .controlSize(.large)
+                            .tint(.white)
+                    }
+                }
+                .frame(height: 220)
+                .contentShape(Rectangle())
+                .onTapGesture { directLaunch() }
+
+                // Settings gear — top-right, only on hover
+                if isHovering {
+                    Button {
+                        showLaunchOptions = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(7)
+                            .background(.black.opacity(0.55), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(8)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
             .frame(height: 220)
@@ -161,9 +247,7 @@ struct GameCardView: View {
         .scaleEffect(isHovering ? 1.02 : 1.0)
         .shadow(color: isHovering ? .cyan.opacity(0.2) : .clear, radius: 12)
         .animation(.easeOut(duration: 0.2), value: isHovering)
-        .onHover { hovering in
-            isHovering = hovering
-        }
+        .onHover { hovering in isHovering = hovering }
         .onAppear { loadCover() }
         .contextMenu {
             Button("Launch Options...") { showLaunchOptions = true }
@@ -175,6 +259,33 @@ struct GameCardView: View {
         }
         .sheet(isPresented: $showLaunchOptions) {
             GameLaunchSheet(game: game, coverImage: coverImage)
+        }
+    }
+
+    private func directLaunch() {
+        guard let prefix = backend.activePrefix, !isLaunching else { return }
+        isLaunching = true
+        Task {
+            let cfg = await backend.getGameConfig(prefix: prefix, appid: game.appid)
+            let exe = (cfg["exe"] as? String ?? "").isEmpty ? (game.exe ?? "") : (cfg["exe"] as! String)
+            guard !exe.isEmpty else { isLaunching = false; return }
+            let esync = cfg["esync"] as? Bool ?? true
+            let msync = cfg["msync"] as? Bool ?? true
+            // normalise: msync wins
+            let finalEsync = msync ? false : esync
+            await backend.launchGame(
+                prefix: prefix,
+                exe: exe,
+                args: cfg["args"] as? String ?? "",
+                backend: cfg["backend"] as? String ?? "auto",
+                installDir: game.installDir,
+                retinaMode: cfg["retina_mode"] as? Bool ?? (NSScreen.main.map { $0.backingScaleFactor > 1.0 } ?? false),
+                metalHud: cfg["metal_hud"] as? Bool ?? false,
+                esync: finalEsync,
+                msync: msync,
+                customEnv: cfg["custom_env"] as? String ?? ""
+            )
+            isLaunching = false
         }
     }
 

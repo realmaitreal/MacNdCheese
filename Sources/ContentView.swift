@@ -7,11 +7,6 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var newBottleName = ""
 
-    var filteredGames: [Game] {
-        if searchText.isEmpty { return backend.games }
-        return backend.games.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
-    }
-
     private var activeBottle: Bottle? {
         guard let prefix = backend.activePrefix else { return nil }
         return backend.bottles.first { $0.path == prefix }
@@ -34,7 +29,7 @@ struct ContentView: View {
                         EmptyBottleLandingView()
                     }
                 } else {
-                    GameGridView(games: filteredGames, searchText: $searchText)
+                    GameGridView(games: backend.games, searchText: $searchText)
                 }
             }
             .background(.ultraThinMaterial)

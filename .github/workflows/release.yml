@@ -47,7 +47,7 @@ RESOURCES="$CONTENTS/Resources"
 mkdir -p "$MACOS" "$RESOURCES"
 
 cp "$SWIFT_BIN" "$MACOS/MacNCheese"
-
+cd ..
 cp assets/MacNCheese.icns "$RESOURCES/MacNCheese.icns"
 
 # Copy backend files

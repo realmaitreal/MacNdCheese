@@ -31,7 +31,7 @@ ls -la assets/MacNCheese.icns
 
 echo ""
 echo "Building Swift executable (release)..."
-cd MacNCheese-SwiftUI
+cd Sources
 swift build -c release 2>&1
 SWIFT_BIN="$(swift build -c release --show-bin-path)/MacNCheese"
 echo "Binary: $SWIFT_BIN"

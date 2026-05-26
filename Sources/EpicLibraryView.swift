@@ -417,7 +417,8 @@ struct EpicGameCard: View {
                 metalHud: cfg["metal_hud"] as? Bool ?? false,
                 esync: msync ? false : esync,
                 msync: msync,
-                customEnv: cfg["custom_env"] as? String ?? ""
+                customEnv: cfg["custom_env"] as? String ?? "",
+                isMacNative: game.isMacNative
             )
             isLaunching = false
         }

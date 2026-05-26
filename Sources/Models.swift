@@ -40,6 +40,7 @@ struct Game: Identifiable, Codable, Hashable {
     var isInstalled: Bool
     var updateAvailable: Bool
     var epicAppName: String?
+    var isMacNative: Bool
 
     enum CodingKeys: String, CodingKey {
         case appid, name, exe
@@ -49,6 +50,7 @@ struct Game: Identifiable, Codable, Hashable {
         case isInstalled = "is_installed"
         case updateAvailable = "update_available"
         case epicAppName = "epic_app_name"
+        case isMacNative = "is_mac_native"
     }
 
     // Tolerant decoder: older backends omit is_installed / update_available /
@@ -64,6 +66,7 @@ struct Game: Identifiable, Codable, Hashable {
         isInstalled = try c.decodeIfPresent(Bool.self, forKey: .isInstalled) ?? true
         updateAvailable = try c.decodeIfPresent(Bool.self, forKey: .updateAvailable) ?? false
         epicAppName = try c.decodeIfPresent(String.self, forKey: .epicAppName)
+        isMacNative = try c.decodeIfPresent(Bool.self, forKey: .isMacNative) ?? false
     }
 }
 

@@ -4493,8 +4493,16 @@ def _build_games_list(prefix: str, owned_list: List[Dict[str, Any]]) -> List[Dic
         if g.get("is_dlc", False):
             continue
         is_installed = app_name in installed_here
-        install_dir = installed_here[app_name].get("install_path", "") if is_installed else ""
-        exe = _detect_exe(Path(install_dir), app_name, app_title) if install_dir else None
+        installed_entry = installed_here.get(app_name, {})
+        install_dir = installed_entry.get("install_path", "") if is_installed else ""
+        platform = installed_entry.get("platform", "Windows") if is_installed else "Windows"
+        is_mac_native = platform in ("Mac", "Mac_Intel")
+        exe = _detect_exe(Path(install_dir), app_name, app_title) if install_dir and not is_mac_native else None
+        if is_mac_native and install_dir:
+            # For Mac-native games find the .app bundle as the "exe"
+            install_path = Path(install_dir)
+            app_bundles = list(install_path.glob("*.app"))
+            exe = str(app_bundles[0]) if app_bundles else install_dir
         cover_url = _legendary_cover_url(g.get("metadata", g))
         games.append({
             "appid": f"epic_{app_name}",
@@ -4508,6 +4516,7 @@ def _build_games_list(prefix: str, owned_list: List[Dict[str, Any]]) -> List[Dic
             "is_installed": is_installed,
             "update_available": False,
             "epic_app_name": app_name,
+            "is_mac_native": is_mac_native,
         })
     games.sort(key=lambda g: (0 if g["is_installed"] else 1, g["name"].lower()))
     return games
@@ -4831,6 +4840,7 @@ def cmd_legendary_launch_game(params: Dict[str, Any]) -> Any:
     esync = params.get("esync")
     msync = params.get("msync")
     custom_env_str = params.get("custom_env", "")
+    is_mac_native = params.get("is_mac_native", False)
 
     if not app_name or not prefix:
         raise ValueError("Missing 'app_name' or 'prefix'")
@@ -4838,39 +4848,46 @@ def cmd_legendary_launch_game(params: Dict[str, Any]) -> Any:
         raise RuntimeError("Legendary is not installed")
 
     prefix_expanded = str(Path(prefix).expanduser().resolve())
-
-    # Find the best Wine binary (backend-aware)
-    wine_bin = _backend_wine_binary(backend, "") or _find_wine_for_bottle("auto")
-    if not wine_bin:
-        raise RuntimeError("No Wine binary found")
-
-    # Build the same environment as a normal Wine launch
-    env = _wine_env(prefix_expanded)
-    env = _apply_backend_env(env, backend)
-    env = _apply_sync_env(env, esync, msync)
-    if metal_hud:
-        env["MTL_HUD_ENABLED"] = "1"
-    for line in (custom_env_str or "").splitlines():
-        if "=" in line:
-            k, v = line.split("=", 1)
-            env[k.strip()] = v.strip()
-
-    # Always apply retina regedit (handles both on and off states)
-    threading.Thread(
-        target=_apply_retina_regedit, args=(wine_bin, env, retina_mode), daemon=True
-    ).start()
-
-    # Inject per-bottle legendary config path into the Wine environment
+    env = _legendary_env(prefix)
     env["LEGENDARY_CONFIG_PATH"] = str(_legendary_config_dir(prefix))
 
-    # legendary launch handles Epic auth token generation and passes all required
-    # -AUTH_TYPE / -AUTH_PASSWORD / -epicapp / etc. args to Wine automatically.
-    cmd = _legendary_cmd(prefix) + [
-        "launch", app_name,
-        "--wine", wine_bin,
-        "--wine-prefix", prefix_expanded,
-        "--skip-version-check",
-    ]
+    if is_mac_native:
+        # Mac-native game: legendary launches the .app directly, no Wine needed
+        if metal_hud:
+            env["MTL_HUD_ENABLED"] = "1"
+        for line in (custom_env_str or "").splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+        cmd = _legendary_cmd(prefix) + ["launch", app_name, "--skip-version-check"]
+    else:
+        # Windows game: launch through Wine
+        wine_bin = _backend_wine_binary(backend, "") or _find_wine_for_bottle("auto")
+        if not wine_bin:
+            raise RuntimeError("No Wine binary found")
+
+        wine_env = _wine_env(prefix_expanded)
+        wine_env.update(env)
+        env = wine_env
+        env = _apply_backend_env(env, backend)
+        env = _apply_sync_env(env, esync, msync)
+        if metal_hud:
+            env["MTL_HUD_ENABLED"] = "1"
+        for line in (custom_env_str or "").splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+
+        threading.Thread(
+            target=_apply_retina_regedit, args=(wine_bin, env, retina_mode), daemon=True
+        ).start()
+
+        cmd = _legendary_cmd(prefix) + [
+            "launch", app_name,
+            "--wine", wine_bin,
+            "--wine-prefix", prefix_expanded,
+            "--skip-version-check",
+        ]
     log(f"legendary launch: {shlex.join(cmd)}")
     proc = subprocess.Popen(
         cmd,

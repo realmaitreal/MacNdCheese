@@ -708,7 +708,8 @@ final class BackendClient: ObservableObject {
         metalHud: Bool = false,
         esync: Bool = true,
         msync: Bool = true,
-        customEnv: String = ""
+        customEnv: String = "",
+        isMacNative: Bool = false
     ) async {
         do {
             _ = try await send(cmd: "legendary_launch_game", params: [
@@ -720,6 +721,7 @@ final class BackendClient: ObservableObject {
                 "esync": esync,
                 "msync": msync,
                 "custom_env": customEnv,
+                "is_mac_native": isMacNative,
             ])
         } catch {
             lastError = "Failed to launch \(appName): \(error.localizedDescription)"

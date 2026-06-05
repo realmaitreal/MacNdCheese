@@ -337,9 +337,7 @@ struct GameCardView: View {
             let cfg = await backend.getGameConfig(prefix: prefix, appid: game.appid)
             let exe = (cfg["exe"] as? String ?? "").isEmpty ? (game.exe ?? "") : (cfg["exe"] as! String)
             guard !exe.isEmpty else { isLaunching = false; return }
-            let esync = cfg["esync"] as? Bool ?? true
-            let msync = cfg["msync"] as? Bool ?? true
-            let finalEsync = msync ? false : esync
+            let msync = (cfg["msync"] as? Bool ?? true) && (backend.status?.msyncSupported ?? false)
             await backend.launchGame(
                 prefix: prefix,
                 exe: exe,
@@ -348,7 +346,6 @@ struct GameCardView: View {
                 installDir: game.installDir,
                 retinaMode: cfg["retina_mode"] as? Bool ?? (NSScreen.main.map { $0.backingScaleFactor > 1.0 } ?? false),
                 metalHud: cfg["metal_hud"] as? Bool ?? false,
-                esync: finalEsync,
                 msync: msync,
                 customEnv: cfg["custom_env"] as? String ?? ""
             )

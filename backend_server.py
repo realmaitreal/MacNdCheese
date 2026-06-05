@@ -2633,6 +2633,23 @@ def cmd_kill_wineserver(params: Dict[str, Any]) -> Any:
     return None
 
 
+def _msync_supported() -> bool:
+    """True if the Wine Staging wineserver was compiled with msync (Mach port) support."""
+    wine = _find_wine_staging()
+    if not wine:
+        return False
+    wineserver = Path(wine).parent / "wineserver"
+    if not wineserver.exists():
+        return False
+    try:
+        result = subprocess.run(
+            ["strings", str(wineserver)],
+            capture_output=True, text=True, timeout=5,
+        )
+        return "wine-%lx-msync" in result.stdout or "msync: bootstrapped" in result.stdout
+    except Exception:
+        return False
+
 def cmd_get_status(params: Dict[str, Any]) -> Any:
     wine = _find_wine()
     return {
@@ -2640,6 +2657,7 @@ def cmd_get_status(params: Dict[str, Any]) -> Any:
         "wine_path": wine or "",
         "has_dxvk": _dxvk_available(),
         "has_mesa": _mesa_available(),
+        "msync_supported": _msync_supported(),
     }
 
 

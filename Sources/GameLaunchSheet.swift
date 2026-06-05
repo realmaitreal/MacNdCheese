@@ -17,8 +17,7 @@ struct GameLaunchSheet: View {
     @State private var loadingBackends = true
     @State private var retinaMode: Bool = NSScreen.main.map { $0.backingScaleFactor > 1.0 } ?? false
     @State private var metalHud: Bool = false
-    @State private var enableEsync: Bool = true
-    @State private var enableMsync: Bool = true
+    @State private var enableMsync: Bool = false
     @State private var advertiseAVX: Bool = false
     @State private var customEnv: String = ""
     @State private var steamMode: String = "silent"
@@ -281,25 +280,23 @@ struct GameLaunchSheet: View {
     }
 
     private var synchronizationSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let msyncAvailable = backend.status?.msyncSupported ?? false
+        return VStack(alignment: .leading, spacing: 6) {
             Text("Synchronization:")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fontWeight(.semibold)
-
-            Toggle(isOn: $enableEsync) {
-                Text("Enable ESync")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-            }
 
             Toggle(isOn: $enableMsync) {
                 Text("Enable MSync")
                     .font(.caption)
                     .fontWeight(.semibold)
             }
+            .disabled(!msyncAvailable)
 
-            Text("MSync is macOS-specific and usually should not be combined with ESync.")
+            Text(msyncAvailable
+                 ? "Mach semaphore sync — reduces wineserver overhead."
+                 : "MSync requires a Wine build with msync support.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
@@ -362,8 +359,8 @@ struct GameLaunchSheet: View {
         if let a = cfg["args"] as? String { extraArgs = a }
         if let r = cfg["retina_mode"] as? Bool { retinaMode = r }
         if let h = cfg["metal_hud"] as? Bool { metalHud = h }
-        if let e = cfg["esync"] as? Bool { enableEsync = e }
-        if let m = cfg["msync"] as? Bool { enableMsync = m }
+        let msyncAvailable = backend.status?.msyncSupported ?? false
+        enableMsync = msyncAvailable && (cfg["msync"] as? Bool ?? true)
         if let env = cfg["custom_env"] as? String { customEnv = env }
         if let avx = cfg["rosetta_avx"] as? Bool { advertiseAVX = avx }
         if let sm = cfg["steam_mode"] as? String { steamMode = sm }
@@ -371,15 +368,13 @@ struct GameLaunchSheet: View {
 
     private func saveGameConfig() async {
         guard let prefix = backend.activePrefix else { return }
-        let sync = normalizedSyncSelection()
         await backend.setGameConfig(prefix: prefix, appid: game.appid, values: [
             "exe": selectedExe,
             "backend": selectedBackend,
             "args": extraArgs,
             "retina_mode": retinaMode,
             "metal_hud": metalHud,
-            "esync": sync.esync,
-            "msync": sync.msync,
+            "msync": msyncEnabled(),
             "custom_env": customEnv,
             "rosetta_avx": advertiseAVX,
             "steam_mode": steamMode,
@@ -428,11 +423,8 @@ struct GameLaunchSheet: View {
         loadingSteamDescription = false
     }
 
-    private func normalizedSyncSelection() -> (esync: Bool, msync: Bool) {
-        if enableMsync {
-            return (false, true)
-        }
-        return (enableEsync, false)
+    private func msyncEnabled() -> Bool {
+        enableMsync && (backend.status?.msyncSupported ?? false)
     }
 
     /// AVX toggle + custom KEY=VALUE lines folded into the single `custom_env`
@@ -451,7 +443,7 @@ struct GameLaunchSheet: View {
         let env = combinedCustomEnv()
         Task {
             await saveGameConfig()
-            let sync = normalizedSyncSelection()
+            let msync = msyncEnabled()
             if let appName = game.epicAppName {
                 await backend.epicLaunchGame(
                     prefix: prefix,
@@ -459,8 +451,7 @@ struct GameLaunchSheet: View {
                     backend: selectedBackend,
                     retinaMode: retinaMode,
                     metalHud: metalHud,
-                    esync: sync.esync,
-                    msync: sync.msync,
+                    msync: msync,
                     customEnv: env
                 )
             } else {
@@ -474,8 +465,7 @@ struct GameLaunchSheet: View {
                     installDir: game.installDir,
                     retinaMode: retinaMode,
                     metalHud: metalHud,
-                    esync: sync.esync,
-                    msync: sync.msync,
+                    msync: msync,
                     gameName: game.name,
                     steamAppId: game.appid,
                     steamMode: steamMode,

@@ -407,15 +407,13 @@ struct EpicGameCard: View {
         isLaunching = true
         Task {
             let cfg = await backend.getGameConfig(prefix: prefix, appid: game.appid)
-            let esync = cfg["esync"] as? Bool ?? true
-            let msync = cfg["msync"] as? Bool ?? true
+            let msync = (cfg["msync"] as? Bool ?? true) && (backend.status?.msyncSupported ?? false)
             await backend.epicLaunchGame(
                 prefix: prefix,
                 appName: appName,
                 backend: cfg["backend"] as? String ?? "auto",
                 retinaMode: cfg["retina_mode"] as? Bool ?? (NSScreen.main.map { $0.backingScaleFactor > 1.0 } ?? false),
                 metalHud: cfg["metal_hud"] as? Bool ?? false,
-                esync: msync ? false : esync,
                 msync: msync,
                 customEnv: cfg["custom_env"] as? String ?? ""
             )

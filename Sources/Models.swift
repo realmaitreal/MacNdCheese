@@ -72,12 +72,14 @@ struct BackendStatus: Codable {
     let winePath: String?
     let hasDxvk: Bool
     let hasMesa: Bool
+    let msyncSupported: Bool
 
     enum CodingKeys: String, CodingKey {
         case wineFound = "wine_found"
         case winePath = "wine_path"
         case hasDxvk = "has_dxvk"
         case hasMesa = "has_mesa"
+        case msyncSupported = "msync_supported"
     }
 }
 

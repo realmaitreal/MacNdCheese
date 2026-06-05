@@ -144,14 +144,14 @@ final class BackendClient: ObservableObject {
         }
     }
 
-    func launchGame(prefix: String, exe: String, args: String = "", backend: String = "auto", installDir: String = "", retinaMode: Bool = false, metalHud: Bool = false, esync: Bool = true, msync: Bool = true, gameName: String = "", steamAppId: String = "", steamMode: String = "silent", customEnv: String = "") async {
+    func launchGame(prefix: String, exe: String, args: String = "", backend: String = "auto", installDir: String = "", retinaMode: Bool = false, metalHud: Bool = false, msync: Bool = true, gameName: String = "", steamAppId: String = "", steamMode: String = "silent", customEnv: String = "") async {
         do {
             let screenInfo = NSScreen.screens.map { s in
                 "\(s.localizedName): scale=\(s.backingScaleFactor) res=\(Int(s.frame.width))x\(Int(s.frame.height))"
             }.joined(separator: " | ")
             let result = try await send(cmd: "launch_game", params: [
                 "prefix": prefix, "exe": exe, "args": args, "backend": backend, "install_dir": installDir,
-                "retina_mode": retinaMode, "metal_hud": metalHud, "esync": esync, "msync": msync,
+                "retina_mode": retinaMode, "metal_hud": metalHud, "esync": false, "msync": msync,
                 "screen_info": screenInfo, "game_name": gameName, "steam_appid": steamAppId,
                 "steam_mode": steamMode, "custom_env": customEnv,
             ])
@@ -700,7 +700,6 @@ final class BackendClient: ObservableObject {
         backend: String = "auto",
         retinaMode: Bool = false,
         metalHud: Bool = false,
-        esync: Bool = true,
         msync: Bool = true,
         customEnv: String = ""
     ) async {
@@ -711,7 +710,7 @@ final class BackendClient: ObservableObject {
                 "backend": backend,
                 "retina_mode": retinaMode,
                 "metal_hud": metalHud,
-                "esync": esync,
+                "esync": false,
                 "msync": msync,
                 "custom_env": customEnv,
             ])

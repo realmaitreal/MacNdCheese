@@ -533,7 +533,7 @@ def _wine_env(prefix: str) -> Dict[str, str]:
 def _apply_retina_regedit(wine: str, env: dict, retina_mode: bool) -> None:
     """Apply RetinaMode, Resolution and LogPixels via `wine regedit file.reg`."""
     retina_val = "y" if retina_mode else "n"
-    dpi_hex = "dc" if retina_mode else "60"  # 220=0xdc, 96=0x60
+    dpi_hex = "c0" if retina_mode else "60"  # 192=0xc0, 96=0x60
     # "Resolution"="auto" forces Wine to recalculate screen size on next launch,
     # preventing the top-left-corner artifact when switching retina mode.
     reg_content = (
@@ -4915,8 +4915,10 @@ def cmd_legendary_launch_game(params: Dict[str, Any]) -> Any:
 
     prefix_expanded = str(Path(prefix).expanduser().resolve())
 
-    # Find the best Wine binary (backend-aware)
-    wine_bin = _backend_wine_binary(backend, "") or _find_wine_for_bottle("auto")
+    # Find the best Wine binary (backend-aware), respecting the bottle's wine_binary pref
+    _bottle_cfg = _load_bottles().get(_resolve_key(prefix), {})
+    _wine_pref = str(_bottle_cfg.get("wine_binary", "auto") or "auto")
+    wine_bin = _backend_wine_binary(backend, "") or _find_wine_for_bottle(_wine_pref)
     if not wine_bin:
         raise RuntimeError("No Wine binary found")
 

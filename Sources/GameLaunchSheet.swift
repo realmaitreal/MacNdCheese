@@ -230,7 +230,7 @@ struct GameLaunchSheet: View {
                     .font(.caption)
                     .fontWeight(.semibold)
             }
-            Text(L("Enable high resolution for retina screens. Game compatibility might be affected."))
+            Text(L("Enable high resolution for retina screens. Game performance is affected."))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

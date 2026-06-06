@@ -169,7 +169,7 @@ enum Localization {
         "Args:": "参数：",
         "Optional launch arguments…": "可选启动参数…",
         "Retina hi-res mode": "Retina 高分辨率模式",
-        "Enable high resolution for retina screens. Game compatibility might be affected.": "为 Retina 屏幕启用高分辨率。可能影响游戏兼容性。",
+        "Enable high resolution for retina screens. Game performance is affected.": "为 Retina 屏幕启用高分辨率。可能影响游戏性能。",
         "Metal HUD": "Metal HUD",
         "Advanced debug (verbose logs)": "高级调试（详细日志）",
         "Runs with WINEDEBUG=+loaddll,+module,+seh instead of -all (shows DLL load failures, missing imports, crashes) and adds -log for Unreal games. Use this when a game won't start, then check the per-game log in ~/Library/Logs/MacNCheese.": "使用 WINEDEBUG=+loaddll,+module,+seh 替代 -all 运行（显示 DLL 加载失败、缺失导入、崩溃信息），并为 Unreal 游戏添加 -log。在游戏无法启动时使用，日志位于 ~/Library/Logs/MacNCheese。",

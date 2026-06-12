@@ -57,6 +57,10 @@ DXVK_PREBUILT_URL="https://github.com/Gcenx/DXVK-macOS/releases/download/v1.10.3
 WINE_STABLE_URL="https://github.com/Gcenx/macOS_Wine_builds/releases/download/11.0/wine-stable-11.0-osx64.tar.xz"
 DXMT_DEFAULT_URL="https://github.com/3Shain/dxmt/releases/download/v0.80/dxmt-v0.80-builtin.tar.gz"
 WINE_STAGING_DEFAULT_URL="https://github.com/Gcenx/macOS_Wine_builds/releases/download/11.9/wine-staging-11.9-osx64.tar.xz"
+# CheeseWine = the unified MacNdCheese Wine engine (wine-staging + DXMT + Apple
+# D3DMetal + the gs.base-swap gate), released from our own repo. Its tar.xz
+# contains "Wine Staging.app" and serves both DXMT and D3DMetal backends.
+CHEESEWINE_REPO="mont127/wine-MacNdCheese-Engine-"
 VKD3D_DEFAULT_URL="https://github.com/mont127/CheeseInstallation/releases/download/v1.0.0/vkd3d-proton.tar.zst"
 GPTK_PACKAGE_URL="https://github.com/mont127/CheeseInstallation/releases/download/v1.0.0/gptk-package.zip"
 
@@ -623,6 +627,45 @@ install_portable_wine_staging() {
   write_component_version "wine_staging" "$staging_tag"
   add_mic_usage_to_app "$PORTABLE_DIR/Wine Staging.app"
   echo "Wine Staging $staging_tag installed to $PORTABLE_DIR"
+}
+
+install_cheesewine() {
+  echo "Step: Installing CheeseWine — unified MacNdCheese Wine engine (latest from ${CHEESEWINE_REPO})..."
+  mkdir -p "$PORTABLE_DIR"
+  api_response=$(curl -s --connect-timeout 20 "https://api.github.com/repos/${CHEESEWINE_REPO}/releases/latest" 2>/dev/null || true)
+  cw_url=""
+  cw_tag=""
+  if [ -n "$api_response" ]; then
+    # Our CI publishes a single tar.xz asset (wine-macndcheese-<ver>-osx64.tar.xz)
+    # that unpacks to "Wine Staging.app".
+    cw_url=$(printf '%s' "$api_response" | grep '"browser_download_url"' | grep '\.tar\.xz' | head -n1 | sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/')
+    cw_tag=$(printf '%s' "$api_response" | grep '"tag_name"' | head -n1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+  fi
+  if [ -z "$cw_url" ]; then
+    echo "CheeseWine: no release asset found on ${CHEESEWINE_REPO} — has the CI build published a release yet?"
+    exit 1
+  fi
+  echo "Downloading CheeseWine $cw_tag from: $cw_url"
+  archive="$WORK_DIR/cheesewine.tar.xz"
+  download_file "$cw_url" "$archive"
+  tar -xJf "$archive" -C "$PORTABLE_DIR" || {
+    echo "Failed to extract CheeseWine"
+    exit 1
+  }
+  echo "Applying security signatures..."
+  find "$PORTABLE_DIR/Wine Staging.app" -type f -perm +111 -exec /usr/bin/codesign --force --sign - --timestamp=none {} \; 2>/dev/null || true
+  write_component_version "wine_branch" "staging"
+  write_component_version "cheesewine" "$cw_tag"
+  add_mic_usage_to_app "$PORTABLE_DIR/Wine Staging.app"
+  echo "CheeseWine $cw_tag installed to $PORTABLE_DIR/Wine Staging.app"
+}
+
+uninstall_cheesewine() {
+  echo "Step: Uninstalling CheeseWine..."
+  rm -rf "$PORTABLE_DIR/Wine Staging.app"
+  grep -v "^cheesewine=" "$VERSION_MARKER" > "${VERSION_MARKER}.tmp" 2>/dev/null || true
+  mv "${VERSION_MARKER}.tmp" "$VERSION_MARKER" 2>/dev/null || true
+  echo "CheeseWine removed."
 }
 
 install_wine_bundle() {
@@ -2053,6 +2096,12 @@ case "$ACTION" in
     ;;
   install_wine_staging)
     install_portable_wine_staging
+    ;;
+  install_cheesewine)
+    install_cheesewine
+    ;;
+  uninstall_cheesewine)
+    uninstall_cheesewine
     ;;
   install_wine_d3dmetal)
     install_wine_d3dmetal

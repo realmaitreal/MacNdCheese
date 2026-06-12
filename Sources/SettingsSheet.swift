@@ -464,6 +464,7 @@ struct SetupSettingsTab: View {
 
     // Toggle selections — each maps to one installer action
     @State private var wantTools = false
+    @State private var wantCheeseWine = false
     @State private var wantWineStable = false
     @State private var wantWineStaging = false
     @State private var wantWineD3DMetal = false
@@ -479,6 +480,7 @@ struct SetupSettingsTab: View {
 
     // Baseline installed state (used to detect installs vs uninstalls)
     @State private var hadTools = false
+    @State private var hadCheeseWine = false
     @State private var hadWineStable = false
     @State private var hadWineStaging = false
     @State private var hadWineD3DMetal = false
@@ -497,6 +499,8 @@ struct SetupSettingsTab: View {
     @State private var wineStableHasUpdate = false
     @State private var wineStagingHasUpdate = false
     @State private var stagingLatestName: String? = nil
+    @State private var cheeseWineHasUpdate = false
+    @State private var cheeseWineLatestName: String? = nil
     @State private var dxmtHasUpdate = false
     @State private var dxmtLatestName: String? = nil
 
@@ -550,6 +554,11 @@ struct SetupSettingsTab: View {
 
                 GroupBox(L("Wine (Translation Engine)")) {
                     VStack(alignment: .leading, spacing: 8) {
+                        ComponentToggleRow(cheeseWineLatestName.map { String(format: L("CheeseWine — MacNdCheese Engine (%@)"), $0) } ?? L("CheeseWine — MacNdCheese Engine"),
+                                          isOn: $wantCheeseWine,
+                                          installed: hadCheeseWine, updateAvailable: cheeseWineHasUpdate)
+                            .disabled(isRunning)
+                            .help(L("The unified MacNdCheese Wine engine: wine-staging + DXMT + Apple D3DMetal in one Wine Staging.app. The latest release of our wine-MacNdCheese-Engine repo; serves both the DXMT and D3DMetal backends."))
                         ComponentToggleRow(L("Wine (Stable)"), isOn: $wantWineStable,
                                           installed: hadWineStable, updateAvailable: wineStableHasUpdate)
                             .disabled(isRunning)
@@ -680,6 +689,7 @@ struct SetupSettingsTab: View {
         Task {
             if let status = await backend.getComponentsStatus() {
                 hadTools = status.hasTools;             wantTools = status.hasTools
+                hadCheeseWine = status.hasCheeseWine;   wantCheeseWine = status.hasCheeseWine
                 hadWineStable = status.hasWineStable;   wantWineStable = status.hasWineStable
                 hadWineStaging = status.hasWineStaging; wantWineStaging = status.hasWineStaging
                 hadWineD3DMetal = status.hasWineD3DMetal; wantWineD3DMetal = status.hasWineD3DMetal
@@ -700,6 +710,8 @@ struct SetupSettingsTab: View {
                 wineStableHasUpdate = info.wineStableUpdateAvailable
                 wineStagingHasUpdate = info.wineStagingUpdateAvailable
                 stagingLatestName = info.gcenxLatestName
+                cheeseWineHasUpdate = info.cheeseWineUpdateAvailable ?? false
+                cheeseWineLatestName = info.cheeseWineLatestName
                 dxmtHasUpdate = info.dxmtUpdateAvailable
                 dxmtLatestName = info.dxmtLatestName
             }
@@ -726,6 +738,7 @@ struct SetupSettingsTab: View {
             else if was { uninstallActions.append(uninstall) }
         }
         plan(wantTools,       hadTools,       install: "install_tools",        uninstall: "uninstall_tools")
+        plan(wantCheeseWine,  hadCheeseWine,  install: "install_cheesewine",   uninstall: "uninstall_cheesewine")
         plan(wantWineStable,  hadWineStable,  install: "install_wine",         uninstall: "uninstall_wine")
         plan(wantWineStaging, hadWineStaging, install: "install_wine_staging", uninstall: "uninstall_wine_staging")
         plan(wantWineD3DMetal, hadWineD3DMetal,

@@ -121,6 +121,7 @@ struct ComponentsStatus: Codable {
     let hasWine: Bool
     let hasWineStable: Bool
     let hasWineStaging: Bool
+    let hasCheeseWine: Bool
     let hasWineDevel: Bool
     let hasMesa: Bool
     let hasDxvk64: Bool
@@ -140,6 +141,7 @@ struct ComponentsStatus: Codable {
         case hasWine = "has_wine"
         case hasWineStable = "has_wine_stable"
         case hasWineStaging = "has_wine_staging"
+        case hasCheeseWine = "has_cheesewine"
         case hasWineDevel = "has_wine_devel"
         case hasMesa = "has_mesa"
         case hasDxvk64 = "has_dxvk64"
@@ -163,6 +165,7 @@ struct ComponentsStatus: Codable {
         hasWine           = try c.decode(Bool.self, forKey: .hasWine)
         hasWineStable     = try c.decode(Bool.self, forKey: .hasWineStable)
         hasWineStaging    = try c.decode(Bool.self, forKey: .hasWineStaging)
+        hasCheeseWine     = try c.decodeIfPresent(Bool.self, forKey: .hasCheeseWine) ?? false
         hasWineDevel      = try c.decodeIfPresent(Bool.self, forKey: .hasWineDevel) ?? false
         hasMesa           = try c.decode(Bool.self, forKey: .hasMesa)
         hasDxvk64         = try c.decode(Bool.self, forKey: .hasDxvk64)
@@ -201,11 +204,14 @@ struct UpdateInfo: Codable {
     let gcenxLatestName: String?
     let dxmtLatestTag: String?
     let dxmtLatestName: String?
+    let cheeseWineLatestTag: String?
+    let cheeseWineLatestName: String?
     let toolsUpdateAvailable: Bool
     let wineUpdateAvailable: Bool
     let wineStableUpdateAvailable: Bool
     let wineStagingUpdateAvailable: Bool
     let dxmtUpdateAvailable: Bool
+    let cheeseWineUpdateAvailable: Bool?
 
     enum CodingKeys: String, CodingKey {
         case cheeseLatestTag = "cheese_latest_tag"
@@ -213,11 +219,14 @@ struct UpdateInfo: Codable {
         case gcenxLatestName = "gcenx_latest_name"
         case dxmtLatestTag = "dxmt_latest_tag"
         case dxmtLatestName = "dxmt_latest_name"
+        case cheeseWineLatestTag = "cheesewine_latest_tag"
+        case cheeseWineLatestName = "cheesewine_latest_name"
         case toolsUpdateAvailable = "tools_update_available"
         case wineUpdateAvailable = "wine_update_available"
         case wineStableUpdateAvailable = "wine_stable_update_available"
         case wineStagingUpdateAvailable = "wine_staging_update_available"
         case dxmtUpdateAvailable = "dxmt_update_available"
+        case cheeseWineUpdateAvailable = "cheesewine_update_available"
     }
 }
 

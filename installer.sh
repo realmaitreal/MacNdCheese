@@ -652,6 +652,57 @@ install_cheesewine() {
     echo "Failed to extract CheeseWine"
     exit 1
   }
+
+  # ── Seed Apple GPTK d3d DLLs + D3DMetal runtime into the CheeseWine bundle ──
+  # The D3DMetal backend needs Apple's proprietary GPTK PE d3d DLLs (the 106 KB
+  # d3d11, etc.) plus the D3DMetal.framework + libd3dshared.dylib native runtime.
+  # Those are NOT in our CI release (can't be redistributed), so copy them from
+  # the app-bundled Wine D3DMetal.app (wine-d3dmetal-bundle.zip) into THIS
+  # CheeseWine bundle. Prefer an already-installed Wine D3DMetal.app; otherwise
+  # unpack the bundled zip just to grab the bits. Mirrors install-local.sh.
+  cw_wine="$PORTABLE_DIR/Wine Staging.app/Contents/Resources/wine"
+  cw_win64="$cw_wine/lib/wine/x86_64-windows"
+  cw_ext="$cw_wine/lib/external"
+  cw_stock="$cw_wine/lib/wine/.mnc-stock"
+  d3dm_src="$PORTABLE_DIR/Wine D3DMetal.app/Contents/Resources/wine"
+  cw_tmp=""
+  if [ ! -d "$d3dm_src/lib/external" ]; then
+    cw_bundle="$(locate_wine_d3dmetal_bundle || true)"
+    if [ -n "$cw_bundle" ]; then
+      echo "CheeseWine: extracting D3DMetal bits from $cw_bundle ..."
+      cw_tmp="$WORK_DIR/cheesewine-d3dm-src"
+      rm -rf "$cw_tmp"; mkdir -p "$cw_tmp"
+      if command -v unzip >/dev/null 2>&1; then
+        unzip -q "$cw_bundle" -d "$cw_tmp" || true
+      elif [ -x "$SEVENZ_BIN" ]; then
+        "$SEVENZ_BIN" x -y -o"$cw_tmp" "$cw_bundle" >/dev/null || true
+      fi
+      cw_unpacked="$(find "$cw_tmp" -maxdepth 2 -type d -name 'Wine D3DMetal.app' | head -n1)"
+      [ -n "$cw_unpacked" ] && d3dm_src="$cw_unpacked/Contents/Resources/wine"
+    fi
+  fi
+  gptk_src="$d3dm_src/lib/wine/x86_64-windows"
+  if [ -d "$gptk_src" ] && [ -d "$cw_win64" ]; then
+    echo "CheeseWine: seeding Apple GPTK d3d DLLs -> x86_64-windows/ ..."
+    for dll in atidxx64.dll d3d10.dll d3d10_1.dll d3d10core.dll d3d11.dll d3d12.dll d3d12core.dll dxgi.dll nvapi64.dll; do
+      [ -f "$gptk_src/$dll" ] && cp "$gptk_src/$dll" "$cw_win64/$dll"
+    done
+    # Stash the D3DMetal-capable d3d set so leaving DXMT restores it
+    # (backend_server.py _restore_wine_lib_from_dxmt_backup reads .mnc-stock).
+    echo "CheeseWine: stashing D3DMetal-capable d3d set -> lib/wine/.mnc-stock/ ..."
+    mkdir -p "$cw_stock"
+    for dll in d3d11.dll d3d12.dll d3d10.dll d3d10core.dll dxgi.dll winemetal.dll; do
+      [ -f "$cw_win64/$dll" ] && cp "$cw_win64/$dll" "$cw_stock/$dll"
+    done
+  else
+    echo "CheeseWine: WARNING — GPTK d3d DLLs not found; D3DMetal backend will be unavailable on CheeseWine (DXMT still works)."
+  fi
+  if [ -d "$d3dm_src/lib/external" ] && [ ! -d "$cw_ext" ]; then
+    echo "CheeseWine: seeding lib/external (D3DMetal.framework + libd3dshared) ..."
+    cp -R "$d3dm_src/lib/external" "$cw_ext"
+  fi
+  [ -n "$cw_tmp" ] && rm -rf "$cw_tmp"
+
   echo "Applying security signatures..."
   find "$PORTABLE_DIR/Wine Staging.app" -type f -perm +111 -exec /usr/bin/codesign --force --sign - --timestamp=none {} \; 2>/dev/null || true
   write_component_version "wine_branch" "staging"

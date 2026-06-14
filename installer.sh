@@ -666,6 +666,26 @@ install_cheesewine() {
   cw_stock="$cw_wine/lib/wine/.mnc-stock"
   d3dm_src="$PORTABLE_DIR/Wine D3DMetal.app/Contents/Resources/wine"
   cw_tmp=""
+  # Newer CI builds fetch the GPTK/D3DMetal payload from a private repo and ship
+  # it inside the release, so the bundle is already D3DMetal-ready. When that's
+  # the case, skip seeding entirely (no need to hunt for Wine D3DMetal.app).
+  if [ -d "$cw_ext/D3DMetal.framework" ] && [ -f "$cw_win64/d3d12.dll" ]; then
+    echo "CheeseWine: bundle already ships GPTK d3d DLLs + lib/external (CI-seeded) — skipping local seeding."
+    if [ ! -d "$cw_stock" ]; then
+      echo "CheeseWine: deriving .mnc-stock from bundled D3DMetal d3d set ..."
+      mkdir -p "$cw_stock"
+      for dll in d3d11.dll d3d12.dll d3d10.dll d3d10core.dll dxgi.dll winemetal.dll; do
+        [ -f "$cw_win64/$dll" ] && cp "$cw_win64/$dll" "$cw_stock/$dll"
+      done
+    fi
+    echo "Applying security signatures..."
+    find "$PORTABLE_DIR/Wine Staging.app" -type f -perm +111 -exec /usr/bin/codesign --force --sign - --timestamp=none {} \; 2>/dev/null || true
+    write_component_version "wine_branch" "staging"
+    write_component_version "cheesewine" "$cw_tag"
+    add_mic_usage_to_app "$PORTABLE_DIR/Wine Staging.app"
+    echo "CheeseWine $cw_tag installed to $PORTABLE_DIR/Wine Staging.app"
+    return 0
+  fi
   if [ ! -d "$d3dm_src/lib/external" ]; then
     cw_bundle="$(locate_wine_d3dmetal_bundle || true)"
     if [ -n "$cw_bundle" ]; then

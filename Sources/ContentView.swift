@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var currentOpenRequest: OpenExeRequest?
     @State private var showOnboarding = false
     @State private var detailGame: Game?
+    @State private var showConsoleMode = false
 
     @ViewBuilder private var killWineserverButton: some View {
         Button {
@@ -30,11 +31,21 @@ struct ContentView: View {
 
     // Bradar global backend picker for the toolbar -- sets the whole bottles default_backend
     // so EVERY game in it render thru the chosen backend (the per-game launch sheet can still
-    // override one game). VR = the openxr-DXMT stack (wineopenxr bridge + x86_64 monado runtime).
+    // override one game, unless its own selector is left on "Default"). VR = the openxr-DXMT
+    // stack (wineopenxr bridge + x86_64 monado runtime).
+    private static let toolbarBackendIds: Set<String> = ["d3dmetal3", "dxmt", "dxvk", "vr"]
+
     @ViewBuilder private var globalBackendPicker: some View {
         if !showStore, backend.activePrefix != nil, activeBottle?.isEpicBottle != true {
             Picker(selection: Binding(
-                get: { activeBottle?.defaultBackend ?? "d3dmetal3" },
+                get: {
+                    // Bottles created before this backend id existed (or ones still
+                    // storing the per-game "auto" sentinel) don't match any tag below,
+                    // which made SwiftUI render the picker blank. Fall back to a real
+                    // default instead — a pop-up button must always show a selection.
+                    let stored = activeBottle?.defaultBackend ?? "d3dmetal3"
+                    return Self.toolbarBackendIds.contains(stored) ? stored : "d3dmetal3"
+                },
                 set: { newVal in
                     guard let prefix = backend.activePrefix else { return }
                     Task { await backend.setBottleConfig(path: prefix, values: ["default_backend": newVal]) }
@@ -53,6 +64,13 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var settingsButtons: some View {
+                // Bradar console / big-picture mode -- fullscreen controller-friendly library (PC logo)
+                Button { withAnimation(.easeInOut(duration: 0.25)) { showConsoleMode = true } } label: {
+                    Image(systemName: "pc")
+                }
+                .help(L("Console Mode"))
+                .accessibilityLabel(L("Console Mode"))
+                .disabled(backend.activePrefix == nil)
                 Button { openSettings() } label: { Image(systemName: "gear") }
             .help(L("Settings"))
             .accessibilityLabel(L("Settings"))
@@ -241,6 +259,25 @@ struct ContentView: View {
         .onChange(of: backend.activePrefix) { _, _ in showStore = false; detailGame = nil }
         .navigationSplitViewStyle(.balanced)
         .tint(.brand)   // brand accent for sidebar selection + prominent buttons
+        // Bradar console / big-picture mode takes over the whole window when its on
+        .overlay {
+            if showConsoleMode {
+                ConsoleModeView(isPresented: $showConsoleMode)
+                    .transition(.opacity)
+                    .zIndex(100)
+            }
+        }
+        // "Installing Steam…" loading screen — SteamSetup installs silently (its wizard doesnt
+        // surface under wine), so this is how the user knows the install is runnin. step is passed
+        // as a plain value (NOT @EnvironmentObject) since overlay content doesnt inherit those here.
+        .overlay {
+            if backend.steamInstalling {
+                SteamInstallOverlay(step: backend.steamInstallStep)
+                    .transition(.opacity)
+                    .zIndex(120)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: backend.steamInstalling)
         .searchable(text: $searchText, placement: .toolbar, prompt: showStore ? L("Search showcase") : L("Search games"))
         .onReceive(NotificationCenter.default.publisher(for: .createNewBottle)) { _ in
             showCreateBottle = true
@@ -475,7 +512,10 @@ struct SteamLandingView: View {
                     if panel.runModal() == .OK, let url = panel.url,
                        let prefix = backend.activePrefix {
                         Task {
-                            await backend.launchGame(prefix: prefix, exe: url.path)
+                            // installers run through run_exe -> the pre-HACK22 installer-wine
+                            // overlay (NOT launchGame/the unified HACK22 wine, which fault-storms
+                            // on 32-bit NSIS/Burn installers like SteamSetup).
+                            await backend.runExe(prefix: prefix, exe: url.path)
                         }
                     }
                 }
@@ -599,7 +639,8 @@ struct EmptyBottleLandingView: View {
                     panel.canChooseFiles = true
                     if panel.runModal() == .OK, let url = panel.url,
                        let prefix = backend.activePrefix {
-                        Task { await backend.launchGame(prefix: prefix, exe: url.path) }
+                        // run_exe -> pre-HACK22 installer-wine overlay (see the other Run Installer button)
+                        Task { await backend.runExe(prefix: prefix, exe: url.path) }
                     }
                 }
                 .buttonStyle(.bordered)

@@ -1347,8 +1347,9 @@ install_vr() {
   # Bradar ONE-tap VR for the unified wine. the openxr-DXMT d3d DLLs + the wineopenxr builtin
   # already ride WITH the unified wine (install_wine_unified stages mnc-d3d w/ the _openxr slots
   # + the wine bundle carries dlls/wineopenxr). so this just: (1) belt-stage the openxr DLLs +
-  # wineopenxr PE into mnc-d3d, (2) stage the OpenXR-runtime manifest, (3) install x86_64 Monado.
-  echo "Step: Installing VR (OpenXR: wineopenxr bridge + openxr-DXMT + Monado runtime)..."
+  # wineopenxr PE into mnc-d3d, (2) stage the OpenXR-runtime manifest, (3) install the x86_64
+  # oxrsys STREAMING runtime (reaches a real Quest/Pico headset -- replaces Monado which cant).
+  echo "Step: Installing VR (OpenXR: wineopenxr bridge + openxr-DXMT + oxrsys streaming runtime)..."
   local wineruut res dxo c woxdll
   wineruut="${PORTABLE_DIR}/wine-unified"
   res="${RESOURCES_DIR:-$(cd "$(dirname "$0")" 2>/dev/null && pwd)}"
@@ -1373,9 +1374,35 @@ install_vr() {
   for c in "$res/wineopenxr/wineopenxr64.json" "$HOME/macndcheese/wineopenxr/wineopenxr64.json" "$wineruut/wineopenxr/wineopenxr64.json"; do
     if [ -f "$c" ]; then mkdir -p "$PORTABLE_DIR/wineopenxr"; cp -f "$c" "$PORTABLE_DIR/wineopenxr/wineopenxr64.json"; echo "install_vr: wineopenxr manifest staged"; break; fi
   done
-  # (4) the x86_64 Monado OpenXR runtime (arm64 wont dlopen into the Rosetta wine)
-  install_monado_runtime || echo "install_vr: WARNING monado runtime install failed — VR wont reach an HMD"
-  write_component_version "vr" "unified-1"
+  # (4) the oxrsys x86_64 STREAMING OpenXR runtime -- it renders+encodes (Metal/VideoToolbox)
+  # then streams to a Quest/Pico companion app over WiFi/USB + gets tracking back, so unlike
+  # Monado it can actually reach a headset on macOS. stage the x86_64 dylib + write the manifest
+  # the backend points XR_RUNTIME_JSON at + drop the streaming config where oxrsys reads it.
+  local oxsrc oxdst oxcfg
+  oxsrc=""
+  for c in "$res/oxrsys-runtime" "$HOME/macndcheese/oxrsys-runtime"; do
+    [ -f "$c/liboxrsys-runtime.dylib" ] && { oxsrc="$c"; break; }
+  done
+  if [ -n "$oxsrc" ]; then
+    oxdst="$PORTABLE_DIR/oxrsys"
+    mkdir -p "$oxdst"
+    cp -f "$oxsrc/liboxrsys-runtime.dylib" "$oxdst/liboxrsys-runtime.dylib"
+    /usr/bin/codesign --force --sign - "$oxdst/liboxrsys-runtime.dylib" 2>/dev/null || true
+    cat > "$oxdst/oxrsys-runtime.json" <<JSON
+{
+    "file_format_version": "1.0.0",
+    "runtime": { "name": "OXRSys Runtime", "library_path": "$oxdst/liboxrsys-runtime.dylib" }
+}
+JSON
+    # oxrsys reads its streaming config (bitrate/refresh/transport) from this fixed path
+    oxcfg="$HOME/Library/Application Support/OXRSys"
+    mkdir -p "$oxcfg"
+    [ -f "$oxsrc/oxrsys-runtime.toml" ] && [ ! -f "$oxcfg/oxrsys-runtime.toml" ] && cp -f "$oxsrc/oxrsys-runtime.toml" "$oxcfg/oxrsys-runtime.toml"
+    echo "install_vr: staged oxrsys x86_64 streaming runtime -> $oxdst (the headset needs the oxrsys companion app to connect)"
+  else
+    echo "install_vr: WARNING oxrsys runtime not bundled -- VR wont reach a headset"
+  fi
+  write_component_version "vr" "unified-oxrsys-1"
   echo "install_vr: done"
 }
 
@@ -2124,6 +2151,8 @@ quick_setup() {
   install_portable_tools
   install_portable_wine
   install_wine_unified
+  install_wine_installer
+  stage_mnc_fonts
   install_dxmt
 }
 
@@ -2246,6 +2275,78 @@ install_wine_unified() {
   echo "install_wine_unified: done ($(du -sh "$dst" 2>/dev/null | cut -f1))"
 }
 
+install_wine_installer() {
+  # The "installer wine": a clone of deps/wine-unified with ONLY the PRE-HACK22 ntdll trio
+  # (unix ntdll.so + both PE ntdll.dll) swapped in. 32-bit NSIS/Burn installers (SteamSetup,
+  # vc_redist, Rockstar Launcher, Social-Club .NET) jump to garbage n fault-storm at 100% CPU
+  # forever under the unified wines HACK22 ntdll, but run clean on the pre-HACK22 ntdll. Everthing
+  # else (kernelbase/wow64/loaders, still unified + signed) is byte-identical, so an APFS clone
+  # costs ~0 disk. the backend (_prehack22_wine / _run_installer_prehack22) runs installers on this
+  # while Steam + the games stay on the unified wine. See the SteamSetup / rdr2-rgl installer notes.
+  echo "Step: Installing installer wine (pre-HACK22 ntdll overlay)..."
+  local uni dst ph c
+  uni="${PORTABLE_DIR}/wine-unified"
+  dst="${PORTABLE_DIR}/wine-installer"
+  if [ ! -e "$uni/dlls/ntdll/ntdll.so" ]; then
+    echo "install_wine_installer: deps/wine-unified missing -> run install_wine_unified first" >&2
+    return 1
+  fi
+  # locate the pre-HACK22 ntdll trio: env override, bundled payload, then the dev worktree
+  ph=""
+  for c in "${WINE_INSTALLER_NTDLL_SRC:-}" \
+           "${PORTABLE_DIR}/wine-installer-payload" \
+           "${RESOURCES_DIR:-}/wine-installer-payload" \
+           "/Volumes/ASAFE/D3DMETALWINEDEV/wt-pre-hack22/build64"; do
+    [ -n "$c" ] && [ -e "$c/dlls/ntdll/ntdll.so" ] && { ph="$c"; break; }
+  done
+  if [ -z "$ph" ]; then
+    echo "install_wine_installer: no pre-HACK22 ntdll payload found; skipping." >&2
+    echo "  (installers will fall back to Wine Stable / unified in the backend)" >&2
+    return 0
+  fi
+  echo "  cloning $uni -> $dst"
+  rm -rf "$dst"
+  if cp -c -R "$uni" "$dst" 2>/dev/null; then
+    echo "  (APFS clonefile: ~0 extra disk)"
+  else
+    cp -R "$uni" "$dst" || { echo "install_wine_installer: clone failed" >&2; return 1; }
+  fi
+  echo "  swapping pre-HACK22 ntdll trio from $ph"
+  cp "$ph/dlls/ntdll/ntdll.so"                 "$dst/dlls/ntdll/ntdll.so"
+  cp "$ph/dlls/ntdll/x86_64-windows/ntdll.dll" "$dst/dlls/ntdll/x86_64-windows/ntdll.dll"
+  cp "$ph/dlls/ntdll/i386-windows/ntdll.dll"   "$dst/dlls/ntdll/i386-windows/ntdll.dll"
+  chmod +x "$dst/dlls/ntdll/ntdll.so" 2>/dev/null || true
+  xattr -dr com.apple.quarantine "$dst" 2>/dev/null || true
+  # cp -c preserves the loaders COW-signature; re-sign anyway so the non-APFS full-copy path keeps
+  # the allow-jit / disable-executable-page-protection entitlements (else a SEPARATE 32-bit W^X
+  # SIGSEGV storm). cp -c inodes are independent so this does NOT touch deps/wine-unified.
+  sign_unified_wine "$dst"
+  echo "install_wine_installer: done ($(du -sh "$dst" 2>/dev/null | cut -f1))"
+}
+
+uninstall_wine_installer() {
+  rm -rf "${PORTABLE_DIR}/wine-installer"
+  echo "uninstall_wine_installer: removed"
+}
+
+stage_mnc_fonts() {
+  # Bundled x86_64 freetype/fontconfig closure -> deps/mnc-fonts so the backend's DYLD_FALLBACK
+  # resolves libfreetype on boxes WITHOUT Homebrew (else "Wine cannot find the FreeType font
+  # library" + fontless games). Sourced from the bundled Resources/mnc-fonts.
+  local dst src
+  dst="${PORTABLE_DIR}/mnc-fonts"
+  for src in "${MNC_FONTS_SRC:-}" "${RESOURCES_DIR:-}/mnc-fonts" "$(dirname "$0")/mnc-fonts"; do
+    if [ -n "$src" ] && [ -f "$src/libfreetype.6.dylib" ]; then
+      rm -rf "$dst"; mkdir -p "$dst"
+      cp -R "$src"/*.dylib "$dst"/ 2>/dev/null
+      xattr -dr com.apple.quarantine "$dst" 2>/dev/null || true
+      echo "stage_mnc_fonts: staged $(ls "$dst"/*.dylib 2>/dev/null | wc -l | tr -d ' ') font libs -> deps/mnc-fonts"
+      return 0
+    fi
+  done
+  echo "stage_mnc_fonts: no bundled mnc-fonts found (no-Homebrew boxes may hit the FreeType error)"
+}
+
 stage_unified_d3d_pack() {
   # copy the d3d DLL pack the unified loader routes to into deps/wine-unified/mnc-d3d
   # source order: env, Resources next to us, the dev steam prefix system32
@@ -2308,6 +2409,15 @@ case "$ACTION" in
     ;;
   uninstall_wine_unified)
     uninstall_wine_unified
+    ;;
+  install_wine_installer)
+    install_wine_installer
+    ;;
+  uninstall_wine_installer)
+    uninstall_wine_installer
+    ;;
+  stage_mnc_fonts)
+    stage_mnc_fonts
     ;;
   uninstall_wine)
     uninstall_wine
